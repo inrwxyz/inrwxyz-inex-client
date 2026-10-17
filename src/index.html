@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>INEX CLIENT — Windows Minecraft Launcher</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-active-tab="home">
+  <div class="app-shell">
+    <!-- Ambient Glass Glow Orbs -->
+    <div class="ambient-glass-orb orb-1" aria-hidden="true"></div>
+    <div class="ambient-glass-orb orb-2" aria-hidden="true"></div>
+
+    <!-- Central Faint INEX Watermark -->
+    <div class="inex-watermark-layer" aria-hidden="true">
+      <img src="inex-logo.png" alt="" class="inex-watermark-img custom-logo-target" />
+    </div>
+
+    <!-- Custom Frameless Windows Titlebar -->
+    <header class="titlebar glass-surface">
+      <div class="titlebar-brand">
+        <img src="inex-logo.png" alt="INEX Logo" class="titlebar-logo custom-logo-target" />
+        <div class="titlebar-title">INEX <span>CLIENT</span></div>
+      </div>
+
+      <div class="titlebar-right">
+        <button type="button" class="header-pill glass-pill" id="headerProfilePill" title="Switch or Create Profile">
+          <span class="pill-status-dot local" id="headerProfileDot"></span>
+          <div class="pill-meta">
+            <span class="pill-label">Active Profile</span>
+            <span class="pill-value" id="headerProfileName">No Profile</span>
+          </div>
+        </button>
+
+        <button type="button" class="header-pill glass-pill" id="headerAccountPill" title="Manage Accounts &amp; Skins">
+          <div class="avatar-head" id="headerAccountAvatar"></div>
+          <div class="pill-meta">
+            <span class="pill-label" id="headerAccountType">MINECRAFT (LOCAL)</span>
+            <span class="pill-value" id="headerAccountName">inexorion</span>
+          </div>
+        </button>
+
+        <button type="button" class="btn btn-sm glass-btn" id="openLogsBtn" title="View Game &amp; Installer Logs">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          Logs
+        </button>
+
+        <div class="win-controls">
+          <button type="button" class="win-btn" id="winMinBtn" title="Minimize">&#8211;</button>
+          <button type="button" class="win-btn" id="winMaxBtn" title="Maximize">&#9633;</button>
+          <button type="button" class="win-btn close" id="winCloseBtn" title="Close">&#10005;</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Workspace Body -->
+    <div class="workspace-body">
+      <!-- Left Navigation Sidebar -->
+      <aside class="sidebar glass-surface">
+        <div class="nav-group">
+          <button type="button" class="nav-btn active" data-nav="home">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span>Play</span>
+          </button>
+          <button type="button" class="nav-btn" data-nav="profiles">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+            <span>Profiles</span>
+          </button>
+          <button type="button" class="nav-btn" data-nav="accounts">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Accounts</span>
+          </button>
+        </div>
+
+        <div class="sidebar-footer">
+          <button type="button" class="nav-btn" data-nav="settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span>Settings</span>
+          </button>
+          <span class="version-tag">v2.0.0</span>
+        </div>
+      </aside>
+
+      <!-- Main Stage -->
+      <main class="main-stage">
+        <!-- ================= 1. HOME / PLAY SECTION ================= -->
+        <section class="view-section active" id="view-home">
+          <div class="home-hero-container glass-card-strong">
+            <div class="home-center-brand">
+              <div class="home-emblem-wrap glass-emblem-ring">
+                <img src="inex-logo.png" alt="INEX Dripping-I Emblem" class="home-emblem-img custom-logo-target" />
+              </div>
+              <h1 class="home-brand-title">INEX <span>CLIENT</span></h1>
+              <p class="home-brand-subtitle">LIFE IS A GAME &bull; CHOOSE YOUR LEVEL</p>
+            </div>
+
+            <div class="home-status-pills">
+              <div class="status-chip glass-pill">
+                <span>Version:</span>
+                <strong id="homeVersionBadge">No Profile Selected</strong>
+              </div>
+              <div class="status-chip glass-pill">
+                <span>Loader:</span>
+                <strong id="homeLoaderBadge">None</strong>
+              </div>
+              <div class="status-chip glass-pill">
+                <span>Memory:</span>
+                <strong id="homeRamBadge">4.0 GB RAM</strong>
+              </div>
+              <div class="status-chip glass-pill">
+                <span>Status:</span>
+                <strong id="homeInstallBadge">Create a Profile to Play</strong>
+              </div>
+            </div>
+
+            <div class="launch-cluster">
+              <div class="profile-dropdown-menu glass-card-strong" id="homeProfileDropdown"></div>
+
+              <div class="launch-split-box" id="launchSplitBox">
+                <button type="button" class="launch-main-btn" id="mainPlayBtn">
+                  <span class="launch-main-title" id="mainPlayTitle">+ CREATE PROFILE</span>
+                  <span class="launch-main-sub" id="mainPlaySub">No profile created yet &bull; Click to create</span>
+                  <span class="launch-main-hint" id="mainPlayHint">Supports Fabric, Forge &amp; Vanilla</span>
+                </button>
+                <button type="button" class="launch-dropdown-trigger" id="launchDropdownBtn" title="Select or Create Profile">
+                  &#9662;
+                </button>
+              </div>
+
+              <div class="progress-drawer glass-card-strong" id="installProgressDrawer">
+                <div class="progress-header">
+                  <span id="progressStageText">Preparing installation...</span>
+                  <span id="progressPercentText">0%</span>
+                </div>
+                <div class="progress-track">
+                  <div class="progress-fill" id="progressBarFill"></div>
+                </div>
+                <div class="progress-sub">
+                  <span id="progressDetailText">Verifying files...</span>
+                  <button type="button" class="btn btn-danger btn-sm" id="cancelInstallBtn">Cancel</button>
+                </div>
+              </div>
+
+              <div class="home-quick-profiles" id="homeQuickProfilesRow"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= 2. PROFILES SECTION ================= -->
+        <section class="view-section" id="view-profiles">
+          <div id="profilesListSubView">
+            <div class="section-header-row">
+              <h2 class="section-title">Your Profiles</h2>
+              <div style="display:flex; gap:10px;">
+                <button type="button" class="btn btn-crimson" id="openCreateProfileBtn">+ Create Profile</button>
+              </div>
+            </div>
+
+            <div class="toolbar-row">
+              <div class="search-input-wrap">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" class="inex-input glass-input" id="profileSearchInput" placeholder="Search profiles..." />
+              </div>
+              <select class="inex-select glass-input" id="profileSortSelect" style="width: 170px;">
+                <option value="version">&uarr; Sort: Version</option>
+                <option value="name">Sort: Profile Name</option>
+                <option value="recent">Sort: Recently Played</option>
+              </select>
+            </div>
+
+            <div class="cards-grid" id="profilesGridContainer"></div>
+          </div>
+
+          <!-- Subview B: Create / Edit Profile View -->
+          <div id="createProfileSubView" style="display:none; flex-direction:column; flex:1;">
+            <div class="section-header-row">
+              <h2 class="section-title" id="profileModalTitle">Create Profile</h2>
+              <button type="button" class="btn glass-btn" id="closeCreateProfileBtn">&#10005; Back to Profiles</button>
+            </div>
+
+            <div class="create-profile-layout">
+              <!-- Left: Unique INEX Animated Version Matrix -->
+              <div class="inex-matrix-column">
+                <div class="matrix-section-label">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                  <span>Select Engine Version Preset</span>
+                </div>
+                <div class="version-posters-grid" id="versionPostersGrid"></div>
+              </div>
+
+              <!-- Right: Profile Configuration Form (Heavy Cyber-Glass & Animated Action Pills) -->
+              <div class="create-form-panel glass-card-strong cyber-right-panel">
+                <div class="form-top-bar">
+                  <div class="form-mode-badge">
+                    <span class="pulse-dot"></span>
+                    <span id="formModeLabel">CREATE PROFILE</span>
+                  </div>
+                  <div class="form-top-links">
+                    <button type="button" class="cyber-top-pill" id="formBrowseModpacksBtn">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                        <line x1="12" y1="22.08" x2="12" y2="12"/>
+                      </svg>
+                      <span>Browse Modpacks</span>
+                    </button>
+                    <button type="button" class="cyber-top-pill" id="toggleAdvancedSetupBtn">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>
+                        <line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>
+                        <line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>
+                        <line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>
+                      </svg>
+                      <span id="toggleAdvancedSetupText">Advanced setup</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="vanilla-form-pill" id="vanillaFormNoticePill" style="display:none;">
+                  &#9888; Vanilla Profile Rules: Mods &amp; modpacks are disabled for Official Vanilla Minecraft.
+                </div>
+
+                <input type="hidden" id="editingProfileIdInput" value="" />
+
+                <div class="field-group">
+                  <label class="field-label" for="profileNameInput">
+                    <span class="cyber-field-title">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      Profile Name
+                    </span>
+                  </label>
+                  <input type="text" class="inex-input glass-input cyber-input" id="profileNameInput" placeholder="e.g. 26.3-Fabric" />
+                </div>
+
+                <div class="field-group">
+                  <div class="field-label">
+                    <label for="profileVersionSelect" class="cyber-field-title">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                      Minecraft Version
+                    </label>
+                    <button type="button" class="cyber-refresh-pill" id="refreshManifestBtn" title="Refresh Official Mojang Manifest">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                      <span>Refresh</span>
+                    </button>
+                  </div>
+                  <select class="inex-select glass-input cyber-input" id="profileVersionSelect"></select>
+                </div>
+
+                <div class="field-group">
+                  <label class="field-label" for="profileLoaderSelect">
+                    <span class="cyber-field-title">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
+                      Mod Loader
+                    </span>
+                  </label>
+                  <select class="inex-select glass-input cyber-input" id="profileLoaderSelect">
+                    <option value="fabric">Fabric (Default &amp; Recommended)</option>
+                    <option value="forge">Forge</option>
+                    <option value="vanilla">Vanilla (Official — No Mods)</option>
+                  </select>
+                </div>
+
+                <div id="advancedProfileFields" class="cyber-advanced-drawer" style="display:none; flex-direction:column; gap:12px;">
+                  <div class="two-col-fields">
+                    <div class="field-group">
+                      <label class="field-label" for="profileLoaderVersionSelect">Mod Loader Version</label>
+                      <select class="inex-select glass-input cyber-input" id="profileLoaderVersionSelect">
+                        <option value="latest">latest</option>
+                      </select>
+                    </div>
+                    <div class="field-group">
+                      <label class="field-label" for="profileJavaSelect">Java Runtime</label>
+                      <select class="inex-select glass-input cyber-input" id="profileJavaSelect">
+                        <option value="auto">Auto-Detect / Bundle (Recommended)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p class="field-hint" id="javaRequirementHint">
+                    INEX CLIENT automatically detects or bundles the exact Portable Java version required before launching.
+                  </p>
+                </div>
+
+                <div class="field-group cyber-hud-box" id="profileHudField" style="margin-top:4px;">
+                  <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                    <input type="checkbox" id="profileHudEnabledInput" checked style="accent-color: var(--crimson-500); width: 16px; height: 16px;" />
+                    <span style="font-size:13px; font-weight:700; color:#fff;">Enable my HUD mod jar in this profile</span>
+                  </label>
+                  <span class="field-hint">Uses the jar from the HUD Mods folder, only if it supports this loader and Minecraft version.</span>
+                </div>
+
+                <div class="field-group" style="margin-top:4px;">
+                  <div class="field-label">
+                    <span class="cyber-field-title">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                      Allocated Memory
+                    </span>
+                    <strong class="cyber-ram-badge" id="profileRamValueLabel">4.0 GB</strong>
+                  </div>
+                  <input type="range" class="ram-slider" id="profileRamSlider" min="1024" max="16384" step="512" value="4096" />
+                  <span class="field-hint">3–6 GB is ideal for most players and performance modpacks.</span>
+                </div>
+
+                <div style="display:flex; gap:10px; margin-top:auto; padding-top:10px;">
+                  <button type="button" class="btn btn-crimson cyber-submit-btn" style="flex:1; padding:12px;" id="saveProfileSubmitBtn">
+                    Create Profile
+                  </button>
+                  <button type="button" class="btn glass-btn" id="cancelProfileFormBtn">Cancel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= 3. PROFILE CONTENT BROWSER ================= -->
+        <section class="view-section" id="view-content">
+          <div class="content-browser-header glass-card">
+            <div class="content-profile-badge">
+              <div class="profile-avatar" id="contentProfileBadgeIcon" style="width:40px; height:40px; font-size:13px;">IN</div>
+              <div>
+                <div style="font-size:14px; font-weight:700; color:#fff;" id="contentProfileBadgeName">Select Profile</div>
+                <div style="font-size:11.5px; color:var(--text-secondary);" id="contentProfileBadgeMeta">Profile Content Manager</div>
+              </div>
+              <select class="inex-select glass-input" id="contentTargetProfileSelect" style="width:185px; margin-left:8px; padding:6px 10px; font-size:12px;" title="Select Target Profile"></select>
+            </div>
+
+            <div class="content-type-pills glass-pill">
+              <button type="button" class="type-pill-btn active" data-content-type="mod">Mods</button>
+              <button type="button" class="type-pill-btn" data-content-type="modpack">Modpacks</button>
+              <button type="button" class="type-pill-btn" data-content-type="resourcepack">Resource Packs</button>
+              <button type="button" class="type-pill-btn" data-content-type="shader">Shaders</button>
+              <button type="button" class="type-pill-btn" data-content-type="datapack">Data Packs</button>
+            </div>
+
+            <button type="button" class="btn btn-sm glass-btn" id="backToProfilesFromContentBtn">&#8592; Back to Profiles</button>
+          </div>
+
+          <div class="content-subtoolbar">
+            <div class="mode-switch-tabs">
+              <button type="button" class="btn btn-sm btn-crimson" id="modeBrowseBtn">Browse Content</button>
+              <button type="button" class="btn btn-sm glass-btn" id="modeInstalledBtn">Installed (<span id="installedCountSpan">0</span>)</button>
+            </div>
+
+            <div class="target-locked-pill" id="targetVersionLockedPill" title="Mods &amp; packs are strictly auto-detected to match this exact profile version">
+              <span>&#128274; Locked Target:</span>
+              <strong id="targetVersionLockLabel">1.21.4 (Fabric)</strong>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:10px; flex:1; max-width:560px;">
+              <div class="search-input-wrap" style="flex:1;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" class="inex-input glass-input" id="modrinthSearchInput" placeholder="Search compatible content for this profile..." style="padding-top:7px; padding-bottom:7px;" />
+              </div>
+              <select class="inex-select glass-input" id="modrinthSortSelect" style="width:140px; padding:7px 10px; font-size:12px;">
+                <option value="relevance">Relevance</option>
+                <option value="downloads">Downloads</option>
+                <option value="follows">Popularity</option>
+                <option value="newest">Newest</option>
+              </select>
+              <button type="button" class="btn btn-sm glass-btn" id="modrinthRefreshBtn" title="Refresh Results">&#8635;</button>
+            </div>
+          </div>
+
+          <div class="vanilla-notice-banner" id="vanillaNoticeBanner">
+            &#9888; <strong>Vanilla Profile Locked:</strong> This profile is running Official Vanilla Minecraft. Per Vanilla rules, mods and modpacks cannot be installed into Vanilla profiles.
+          </div>
+
+          <div class="modpack-notice-banner" id="modpackNoticeBanner">
+            Installing a modpack (<code>.mrpack</code>) extracts its manifest, downloads all verified mods &amp; assets for this profile's version, and applies overrides safely.
+          </div>
+
+          <div class="modrinth-list" id="modrinthResultsContainer"></div>
+
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-top:16px; padding-top:12px; border-top:1px solid var(--border-subtle);" id="modrinthPaginationBar">
+            <span style="font-size:12px; color:var(--text-secondary);" id="modrinthPageSummary">Showing results</span>
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="btn btn-sm glass-btn" id="modrinthPrevPageBtn">&larr; Previous</button>
+              <button type="button" class="btn btn-sm glass-btn" id="modrinthNextPageBtn">Next &rarr;</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= 4. UNIQUE INEX ACCOUNTS & SKINS SECTION ================= -->
+        <section class="view-section" id="view-accounts">
+          <div id="accountsMainView" class="inex-accounts-wrapper">
+            <!-- Left Side: Interactive Accounts List -->
+            <div class="inex-accounts-list-panel glass-card">
+              <div class="section-header-row" style="margin-bottom: 12px;">
+                <h2 class="section-title" style="font-size:18px;">Identities</h2>
+                <button type="button" class="btn btn-crimson btn-sm" id="openAddAccountBtn">+ Link Account</button>
+              </div>
+              <div class="search-input-wrap" style="margin-bottom:14px; flex:0;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" class="inex-input glass-input" id="accountSearchInput" placeholder="Search identities..." style="padding-top:8px; padding-bottom:8px;" />
+              </div>
+              <div id="inexAccountBadgesList" class="inex-badge-list"></div>
+            </div>
+
+            <!-- Right Side: Holographic Skin Studio -->
+            <div class="inex-skin-studio-panel glass-card-strong">
+              <div class="studio-top-bar">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="studio-pulse-dot"></span>
+                  <span style="font-size:12px; font-weight:800; letter-spacing:0.08em; color:#fff; text-transform:uppercase;">
+                    HOLOGRAPHIC SKIN STUDIO
+                  </span>
+                </div>
+
+                <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                  <!-- Animated Online Skin Sync Toggle Pill -->
+                  <div class="cyber-sync-pill" id="skinSyncPillWrap" title="ON: Syncs skin online so everyone sees each other's skin. OFF: Offline local skin only (Max FPS Cracked Mode).">
+                    <div class="cyber-sync-icon-wrap" id="skinSyncAnimIcon">
+                      <svg class="sync-radar-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle class="sync-ring-outer" cx="12" cy="12" r="9" stroke-dasharray="14 6"/>
+                        <path class="sync-core-bolt" d="M13 7L9 13h4l-1 4 4-6h-4l1-4z"/>
+                      </svg>
+                    </div>
+                    <div class="cyber-sync-meta">
+                      <span class="cyber-sync-title">SKIN SYNC</span>
+                      <span class="cyber-sync-status" id="skinSyncStatusBadge">ONLINE • CLOUD</span>
+                    </div>
+                    <label class="switch" style="margin-left:4px;">
+                      <input type="checkbox" id="settingSkinSyncToggle" checked />
+                      <span class="slider-toggle"></span>
+                    </label>
+                  </div>
+
+                  <button type="button" class="btn btn-sm btn-crimson" id="addSkinSlotBtn">+ New Skin Slot</button>
+                </div>
+              </div>
+              
+              <!-- 2D Static Preview (Front & Back) with Cyber Grid -->
+              <div class="hologram-stage">
+                <div class="holo-scanline"></div>
+                <canvas id="skinCanvas" width="400" height="290" style="position:relative; z-index:2;"></canvas>
+              </div>
+              
+              <div style="margin-top:16px; display:flex; flex-direction:column; gap:10px;">
+                <div id="skinSlotsContainer" style="display:flex; flex-direction:column; gap:10px;"></div>
+                <input type="file" id="skinFileUploadInput" accept="image/png" style="display:none;" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Subview B: Link New Identity (Add Account) -->
+          <div id="addAccountSubView" style="display:none; flex-direction:column; flex:1;">
+            <div class="section-header-row">
+              <h2 class="section-title">Link New Identity</h2>
+              <button type="button" class="btn glass-btn" id="closeAddAccountBtn">&#10005; Back to Accounts</button>
+            </div>
+
+            <div class="add-account-split">
+              <div class="account-type-cards">
+                <div class="acc-type-tile glass-card-strong selected" id="selectMsAccountTile">
+                  <div class="acc-tile-icon-ring">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                      <rect x="2" y="2" width="9" height="9" rx="1.5" fill="#f25022"/>
+                      <rect x="13" y="2" width="9" height="9" rx="1.5" fill="#7fba00"/>
+                      <rect x="2" y="13" width="9" height="9" rx="1.5" fill="#00a4ef"/>
+                      <rect x="13" y="13" width="9" height="9" rx="1.5" fill="#ffb900"/>
+                    </svg>
+                  </div>
+                  <div style="font-weight:800; font-size:15px; color:#fff;">Microsoft Account</div>
+                  <span class="acc-tile-badge">Official Online Auth</span>
+                </div>
+
+                <div class="acc-type-tile glass-card-strong" id="selectLocalAccountTile">
+                  <div class="acc-tile-icon-ring">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--crimson-400)" stroke-width="2">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                      <circle cx="12" cy="10" r="3"/>
+                    </svg>
+                  </div>
+                  <div style="font-weight:800; font-size:15px; color:#fff;">Local Account</div>
+                  <span class="acc-tile-badge">Offline / LAN Mode</span>
+                </div>
+              </div>
+
+              <div class="create-form-panel glass-card-strong">
+                <!-- Microsoft Auth Panel -->
+                <div id="msAccountFormPanel" style="display:flex; flex-direction:column; gap:16px; height:100%;">
+                  <div style="font-size:11px; font-weight:800; letter-spacing:0.08em; color:var(--crimson-400); text-transform:uppercase;">
+                    MICROSOFT OAUTH2 GATEWAY
+                  </div>
+                  <div style="padding:16px; border-radius:12px; background:rgba(255,255,255,0.04); border:1px solid var(--border-subtle); display:flex; flex-direction:column; gap:6px;">
+                    <div style="font-weight:700; font-size:14px; color:#fff;">Official Xbox Live &amp; Minecraft Services</div>
+                    <div style="font-size:12px; color:var(--text-secondary); line-height:1.5;">
+                      Signs in securely via Microsoft OAuth2. Your credentials remain isolated in the main process and sync directly with official servers.
+                    </div>
+                  </div>
+                  <button type="button" class="btn btn-crimson" style="margin-top:auto; padding:14px;" id="signInMicrosoftBtn">
+                    &#9632; Sign in with Microsoft
+                  </button>
+                </div>
+
+                <!-- Local Account Form Panel -->
+                <div id="localAccountFormPanel" style="display:none; flex-direction:column; gap:16px; height:100%;">
+                  <div style="font-size:11px; font-weight:800; letter-spacing:0.08em; color:var(--crimson-400); text-transform:uppercase;">
+                    LOCAL IDENTITY (OFFLINE / SINGLEPLAYER &amp; LAN)
+                  </div>
+                  <div class="field-group">
+                    <label class="field-label" for="localUsernameInput">Minecraft Username</label>
+                    <input type="text" class="inex-input glass-input" id="localUsernameInput" placeholder="e.g. inexorion (3-16 chars)" maxlength="16" />
+                    <span class="field-hint">Generates a deterministic OfflinePlayer UUID v3 with independent per-account skin slots.</span>
+                  </div>
+                  <button type="button" class="btn btn-crimson" style="margin-top:auto; padding:14px;" id="createLocalAccountBtn">
+                    + Create Local Identity
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= 5. SETTINGS SECTION ================= -->
+        <section class="view-section" id="view-settings">
+          <div class="section-header-row">
+            <h2 class="section-title">Settings</h2>
+            <button type="button" class="btn glass-btn" id="resetSettingsBtn">Reset to Defaults</button>
+          </div>
+
+          <div class="settings-group-title">IN-GAME HUD MOD (YOUR OWN JAR)</div>
+
+          <div class="settings-row-card glass-card">
+            <div class="settings-row-left">
+              <div class="settings-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+              </div>
+              <div>
+                <div class="settings-label-title">HUD Mod Jar</div>
+                <div class="settings-label-sub">
+                  Put your HUD <code>.jar</code> in the HUD Mods folder (or press Upload). It is attached automatically to each Fabric / Forge profile.
+                </div>
+                <div class="field-group" style="margin-top:10px; max-width:380px;">
+                  <label class="field-label" for="hudJarSelect">Active HUD jar</label>
+                  <select class="inex-select glass-input" id="hudJarSelect">
+                    <option value="">Auto (all supported HUD jars)</option>
+                    <option value="__none__">None (HUD off)</option>
+                  </select>
+                </div>
+                <div class="settings-label-sub" id="hudModListText" style="margin-top:8px;"></div>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-sm glass-btn" data-open-dir="hudModsDir">
+                Open HUD Mods Folder
+              </button>
+              <button type="button" class="btn btn-sm btn-crimson" id="uploadHudJarBtn">
+                Upload HUD Mod (.jar)
+              </button>
+            </div>
+          </div>
+
+          <div class="settings-group-title">DISCORD RICH PRESENCE &amp; GLASS APPEARANCE</div>
+
+          <div class="settings-row-card glass-card">
+            <div class="settings-row-left">
+              <div class="settings-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              </div>
+              <div>
+                <div class="settings-label-title">
+                  Discord Real-Time Rich Presence
+                  <span class="discord-status-badge" id="discordStatusBadge">Active</span>
+                </div>
+                <div class="settings-label-sub">Show INEX CLIENT and your active Minecraft profile in real-time on Discord while the client is open.</div>
+              </div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="settingDiscordToggle" checked />
+              <span class="slider-toggle"></span>
+            </label>
+          </div>
+
+          <div class="settings-row-card glass-card">
+            <div class="settings-row-left">
+              <div class="settings-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              </div>
+              <div>
+                <div class="settings-label-title">Frosted Glass Blur Intensity (<span id="settingGlassValueLabel">24px</span>)</div>
+                <div class="settings-label-sub">Adjust the glassmorphism backdrop blur across all launcher panels and cards.</div>
+              </div>
+            </div>
+            <input type="range" class="ram-slider" id="settingGlassSlider" style="width:200px;" min="8" max="40" step="2" value="24" />
+          </div>
+
+          <!-- LAUNCHER ANIMATIONS & CYBER FX TOGGLE CARD -->
+          <div class="settings-row-card glass-card" id="settingAnimationsRowCard">
+            <div class="settings-row-left">
+              <div class="settings-icon-box cyber-fx-icon-box" id="settingAnimIconBox">
+                <svg class="fx-orbit-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle class="fx-orbit-ring" cx="12" cy="12" r="9" stroke-dasharray="10 5"/>
+                  <polygon class="fx-core-star" points="12 5 13.8 10.2 19 12 13.8 13.8 12 19 10.2 13.8 5 12 10.2 10.2 12 5"/>
+                </svg>
+              </div>
+              <div>
+                <div class="settings-label-title">
+                  Launcher Animations &amp; Cyber FX
+                  <span class="discord-status-badge" id="animationStatusBadge">ACTIVE • CYBER FX</span>
+                </div>
+                <div class="settings-label-sub">
+                  Enable floating ambient glow orbs, holographic scanlines, shimmer sweeps, and animated icons. Turn OFF for 0% background GPU usage and maximum FPS.
+                </div>
+              </div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="settingAnimationsToggle" checked />
+              <span class="slider-toggle"></span>
+            </label>
+          </div>
+
+          <div class="settings-group-title">PORTABLE JAVA RUNTIME BUNDLER</div>
+
+          <div class="settings-row-card glass-card">
+            <div class="settings-row-left">
+              <div class="settings-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/></svg>
+              </div>
+              <div>
+                <div class="settings-label-title">Auto-Bundle Portable Java Runtime</div>
+                <div class="settings-label-sub" id="detectedJavaSummaryText">Automatically downloads &amp; bundles the exact Portable Java version required by any Minecraft version.</div>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <button type="button" class="btn btn-sm btn-crimson" id="bundleJava21Btn">Bundle Java 21</button>
+              <button type="button" class="btn btn-sm glass-btn" id="bundleJava17Btn">Bundle Java 17</button>
+              <button type="button" class="btn btn-sm glass-btn" id="bundleJava8Btn">Bundle Java 8</button>
+            </div>
+          </div>
+
+          <div class="settings-group-title">GAME WINDOW</div>
+
+          <div class="settings-row-card glass-card">
+            <div class="settings-row-left">
+              <div class="settings-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+              </div>
+              <div>
+                <div class="settings-label-title">Fullscreen</div>
+                <div class="settings-label-sub">Start Minecraft in fullscreen mode. Changes apply on the next launch.</div>
+              </div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="settingFullscreenToggle" />
+              <span class="slider-toggle"></span>
+            </label>
+          </div>
+
+          <div class="settings-row-card glass-card">
+            <div class="settings-row-left">
+              <div class="settings-icon-box">&harr;</div>
+              <div>
+                <div class="settings-label-title">Window Width (px)</div>
+                <div class="settings-label-sub">The width of the Minecraft window when launched, in pixels.</div>
+              </div>
+            </div>
+            <input type="number" class="inex-input glass-input" id="settingWindowWidthInput" style="width:120px; text-align:center;" min="640" max="7680" value="1280" />
+          </div>
+
+          <div class="settings-row-card glass-card">
+            <div class="settings-row-left">
+              <div class="settings-icon-box">&#8597;</div>
+              <div>
+                <div class="settings-label-title">Window Height (px)</div>
+                <div class="settings-label-sub">The height of the Minecraft window when launched, in pixels.</div>
+              </div>
+            </div>
+            <input type="number" class="inex-input glass-input" id="settingWindowHeightInput" style="width:120px; text-align:center;" min="480" max="4320" value="720" />
+          </div>
+
+          <div class="settings-group-title">DIRECTORIES</div>
+
+          <div class="settings-row-card glass-card">
+            <div class="settings-row-left">
+              <div class="settings-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              </div>
+              <div>
+                <div class="settings-label-title">Game Data Directory</div>
+                <div class="settings-label-sub" id="settingGameDataDirText">C:\Users\Player\AppData\Roaming\.inexclient</div>
+              </div>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="btn btn-sm glass-btn" id="changeGameDataDirBtn">Change</button>
+              <button type="button" class="btn btn-sm glass-btn" data-open-dir="gameDataDir">Open</button>
+            </div>
+          </div>
+
+          <div class="settings-row-card glass-card">
+            <div class="settings-row-left">
+              <div class="settings-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              </div>
+              <div>
+                <div class="settings-label-title">Install Directory</div>
+                <div class="settings-label-sub" id="settingInstallDirText">C:\Users\Player\AppData\Local\InexClient</div>
+              </div>
+            </div>
+            <button type="button" class="btn btn-sm glass-btn" data-open-dir="installDir">Open</button>
+          </div>
+
+          <div class="settings-row-card glass-card">
+            <div class="settings-row-left">
+              <div class="settings-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              </div>
+              <div>
+                <div class="settings-label-title">Configuration Directory</div>
+                <div class="settings-label-sub" id="settingConfigDirText">C:\Users\Player\AppData\Roaming\InexClient</div>
+              </div>
+            </div>
+            <button type="button" class="btn btn-sm glass-btn" data-open-dir="configDir">Open</button>
+          </div>
+
+          <div class="settings-row-card glass-card">
+            <div class="settings-row-left">
+              <div class="settings-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/></svg>
+              </div>
+              <div>
+                <div class="settings-label-title">Bundled Java Runtimes Directory</div>
+                <div class="settings-label-sub" id="settingJavaDirText">C:\Users\Player\AppData\Roaming\InexClient\runtimes</div>
+              </div>
+            </div>
+            <button type="button" class="btn btn-sm glass-btn" data-open-dir="javaDir">Open</button>
+          </div>
+
+          <div class="settings-group-title">RUNTIME, DOWNLOADS &amp; LAUNCHER BEHAVIOR</div>
+
+          <div class="settings-row-card glass-card">
+            <div class="settings-row-left">
+              <div class="settings-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              </div>
+              <div>
+                <div class="settings-label-title">Default RAM Allocation (<span id="settingDefaultRamLabel">4.0 GB</span>)</div>
+                <div class="settings-label-sub">Default memory assigned to newly created profiles.</div>
+              </div>
+            </div>
+            <input type="range" class="ram-slider" id="settingDefaultRamSlider" style="width:200px;" min="1024" max="16384" step="512" value="4096" />
+          </div>
+
+          <div class="settings-row-card glass-card">
+            <div class="settings-row-left">
+              <div class="settings-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              </div>
+              <div>
+                <div class="settings-label-title">Concurrent Asset &amp; Library Downloads</div>
+                <div class="settings-label-sub">Number of parallel download streams during installation (1–32).</div>
+              </div>
+            </div>
+            <input type="number" class="inex-input glass-input" id="settingConcurrentInput" style="width:100px; text-align:center;" min="1" max="32" value="8" />
+          </div>
+
+          <div class="settings-row-card glass-card">
+            <div class="settings-row-left">
+              <div class="settings-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+              </div>
+              <div>
+                <div class="settings-label-title">When Minecraft Launches</div>
+                <div class="settings-label-sub">Control how the INEX CLIENT window behaves while the game is running.</div>
+              </div>
+            </div>
+            <select class="inex-select glass-input" id="settingCloseBehaviorSelect" style="width:190px;">
+              <option value="keep-open">Keep Launcher Open</option>
+              <option value="minimize">Minimize Launcher</option>
+              <option value="close">Close Launcher</option>
+            </select>
+          </div>
+
+          <div class="settings-row-card glass-card">
+            <div class="settings-row-left">
+              <div class="settings-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              </div>
+              <div>
+                <div class="settings-label-title">Show Minecraft Snapshots</div>
+                <div class="settings-label-sub">Include experimental Mojang snapshots in version selectors.</div>
+              </div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="settingSnapshotsToggle" />
+              <span class="slider-toggle"></span>
+            </label>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Modal 1: Live Game & Installer Logs Console -->
+  <div class="modal-backdrop" id="logsModalBackdrop">
+    <div class="modal-card glass-card-strong">
+      <div class="section-header-row" style="margin-bottom:0;">
+        <h3 style="font-size:16px; font-weight:800;">INEX Live Process &amp; Installer Console</h3>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-sm glass-btn" id="clearLogsBtn">Clear</button>
+          <button type="button" class="btn btn-sm glass-btn" id="closeLogsModalBtn">&#10005; Close</button>
+        </div>
+      </div>
+      <div class="log-console-box" id="logConsoleOutput"></div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Delete Profile Confirmation Dialog -->
+  <div class="modal-backdrop" id="deleteConfirmModalBackdrop">
+    <div class="modal-card glass-card-strong" style="max-width:440px;">
+      <h3 style="font-size:17px; font-weight:800;">Delete Profile</h3>
+      <p style="font-size:13px; color:var(--text-secondary);" id="deleteConfirmMessage">
+        Are you sure you want to remove this profile from INEX CLIENT?
+      </p>
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:8px;">
+        <button type="button" class="btn glass-btn" id="cancelDeleteProfileBtn">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirmDeleteProfileBtn">Delete Profile</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Project Details Modal -->
+  <div class="modal-backdrop" id="projectDetailsModalBackdrop">
+    <div class="modal-card glass-card-strong">
+      <div class="section-header-row" style="margin-bottom:0;">
+        <h3 style="font-size:17px; font-weight:800;" id="detailModalTitle">Project Details</h3>
+        <button type="button" class="btn btn-sm glass-btn" id="closeProjectDetailsBtn">&#10005; Close</button>
+      </div>
+      <div id="detailModalBody" style="font-size:13px; color:var(--text-secondary); overflow-y:auto; max-height:360px; line-height:1.55;"></div>
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button type="button" class="btn btn-crimson" id="detailModalInstallBtn">Install into Active Profile</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notifications Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="logo-default.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>
