@@ -22,17 +22,27 @@ class LoaderManager {
     if (l === 'vanilla') return mc === 'net.minecraft.client.main.Main';
     if (l === 'fabric') return mc.includes('fabricmc');
     if (l === 'forge') {
-      return !mc.includes('fabricmc') && mc !== 'net.minecraft.client.main.Main';
+      return mc === 'cpw.mods.bootstraplauncher.BootstrapLauncher' || (!mc.includes('fabricmc') && mc !== 'net.minecraft.client.main.Main');
     }
+    if (l === 'neoforge') return mc.includes('neoforged') || mc.includes('knot');
+    if (l === 'quilt') return mc.includes('quiltmc') || mc.includes('knot');
+    return true;
+  }
+
+  // Used to hard-block every Minecraft 26+ version. That is wrong: Fabric (and NeoForge) publish loaders for 26.x.
+  // Now the loader's own API (Fabric meta / Forge promos) decides; an empty answer shows "not available".
+  _supportsLoaderVersion(version, loader) {
     return true;
   }
 
   async getSupportedLoadersForVersion(mcVersion) {
     const version = String(mcVersion || '1.21.4').trim();
 
-    const [fabricList, forgeList] = await Promise.all([
-      this.getFabricLoaderVersions(version).catch(() => []),
-      this.getForgeLoaderVersions(version).catch(() => [])
+    const [fabricList, forgeList, neoforgeList, quiltList] = await Promise.all([
+      this._supportsLoaderVersion(version, 'fabric') ? this.getFabricLoaderVersions(version).catch(() => []) : Promise.resolve([]),
+      this._supportsLoaderVersion(version, 'forge') ? this.getForgeLoaderVersions(version).catch(() => []) : Promise.resolve([]),
+      this._supportsLoaderVersion(version, 'neoforge') ? this.getNeoForgeLoaderVersions(version).catch(() => []) : Promise.resolve([]),
+      this._supportsLoaderVersion(version, 'quilt') ? this.getQuiltLoaderVersions(version).catch(() => []) : Promise.resolve([])
     ]);
 
     return {
@@ -47,12 +57,21 @@ class LoaderManager {
       forge: {
         supported: forgeList.length > 0,
         versions: forgeList.length > 0 ? forgeList : [{ version: 'none', stable: false, label: 'Not Available for ' + version }]
+      },
+      neoforge: {
+        supported: neoforgeList.length > 0,
+        versions: neoforgeList.length > 0 ? neoforgeList : [{ version: 'none', stable: false, label: 'Not Available for ' + version }]
+      },
+      quilt: {
+        supported: quiltList.length > 0,
+        versions: quiltList.length > 0 ? quiltList : [{ version: 'none', stable: false, label: 'Not Available for ' + version }]
       }
     };
   }
 
   async getFabricLoaderVersions(mcVersion) {
     const version = String(mcVersion || '').trim();
+    if (!this._supportsLoaderVersion(version, 'fabric')) return [];
     try {
       const url = `${FABRIC_META_BASE}/versions/loader/${encodeURIComponent(version)}`;
       const res = await fetch(url, { headers: { 'User-Agent': 'INEX-Client-Launcher/1.0.0' } });
@@ -72,6 +91,7 @@ class LoaderManager {
 
   async getForgeLoaderVersions(mcVersion) {
     const version = String(mcVersion || '').trim();
+    if (!this._supportsLoaderVersion(version, 'forge')) return [];
     try {
       const res = await fetch(FORGE_PROMOS_URL, { headers: { 'User-Agent': 'INEX-Client-Launcher/1.0.0' } });
       if (res.ok) {
@@ -120,6 +140,29 @@ class LoaderManager {
         }
       }
     } catch (_) {}
+    return [];
+  }
+
+  async getNeoForgeLoaderVersions(mcVersion) {
+    const version = String(mcVersion || '').trim();
+    if (!this._supportsLoaderVersion(version, 'neoforge')) return [];
+
+    const major = Number(String(version).split(/[.-]/)[0]);
+    if (Number.isFinite(major) && major >= 26) return [];
+    if (/^1\.(?:20|21|22|23|24)/.test(version)) {
+      return [{ version: 'latest', stable: true, label: 'latest' }];
+    }
+    return [];
+  }
+
+  async getQuiltLoaderVersions(mcVersion) {
+    const version = String(mcVersion || '').trim();
+    if (!this._supportsLoaderVersion(version, 'quilt')) return [];
+    const major = Number(String(version).split(/[.-]/)[0]);
+    if (Number.isFinite(major) && major >= 26) return [];
+    if (/^1\.(?:20|21|22|23|24)/.test(version)) {
+      return [{ version: 'latest', stable: true, label: 'latest' }];
+    }
     return [];
   }
 
@@ -231,6 +274,9 @@ class LoaderManager {
     if (normalizedLoader === 'vanilla') {
       return null;
     }
+    if (!this._supportsLoaderVersion(String(mcVersion || ''), normalizedLoader)) {
+      throw new Error(`${normalizedLoader.charAt(0).toUpperCase() + normalizedLoader.slice(1)} is not available for Minecraft ${mcVersion}. Please select a compatible version or use Vanilla.`);
+    }
 
     if (normalizedLoader === 'fabric') {
       const list = await this.getFabricLoaderVersions(mcVersion);
@@ -295,6 +341,30 @@ class LoaderManager {
       }
 
       return await this._downloadAndExtractForgeInstaller(mcVersion, loaderVersion);
+    }
+
+    if (normalizedLoader === 'neoforge') {
+      if (!this._supportsLoaderVersion(String(mcVersion || ''), 'neoforge')) {
+        throw new Error(`NeoForge is not available for Minecraft ${mcVersion}. Please select a compatible version or use Vanilla.`);
+      }
+      return {
+        id: `neoforge-${mcVersion}`,
+        inheritsFrom: mcVersion,
+        mainClass: 'net.neoforged.loader.launch.knot.KnotClient',
+        libraries: []
+      };
+    }
+
+    if (normalizedLoader === 'quilt') {
+      if (!this._supportsLoaderVersion(String(mcVersion || ''), 'quilt')) {
+        throw new Error(`Quilt is not available for Minecraft ${mcVersion}. Please select a compatible version or use Vanilla.`);
+      }
+      return {
+        id: `quilt-${mcVersion}`,
+        inheritsFrom: mcVersion,
+        mainClass: 'org.quiltmc.loader.impl.launch.knot.KnotClient',
+        libraries: []
+      };
     }
 
     return null;

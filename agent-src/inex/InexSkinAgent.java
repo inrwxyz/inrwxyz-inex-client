@@ -34,7 +34,8 @@ import java.util.regex.Pattern;
 public class InexSkinAgent {
     static final String DB = System.getProperty("inex.skin.db",
             "https://inex-cosmetics-default-rtdb.firebaseio.com/cosmetics/");
-    static final boolean ONLINE_SYNC = !"false".equalsIgnoreCase(System.getProperty("inex.skin.online", "true"));
+    static volatile boolean ONLINE_SYNC = !"false".equalsIgnoreCase(System.getProperty("inex.skin.online", "true"));
+    static final String SETTINGS_FILE = System.getProperty("inex.skin.settingsFile", "").trim();
     static final String SELF_USER = System.getProperty("inex.skin.self", "").toLowerCase(Locale.ROOT).trim();
     static final String SELF_FILE = System.getProperty("inex.skin.selfFile", "").trim();
     static final String SELF_MODEL = System.getProperty("inex.skin.selfModel", "slim").trim();
@@ -43,6 +44,7 @@ public class InexSkinAgent {
     static final Set<String> LOGGED = Collections.synchronizedSet(new HashSet<String>());
     static final Map<String, Entry> CACHE = new ConcurrentHashMap<String, Entry>();
     static final Map<Object, String> APPLIED = Collections.synchronizedMap(new WeakHashMap<Object, String>());
+    static final Map<Object, Object> ORIGINAL_SKINS = Collections.synchronizedMap(new WeakHashMap<Object, Object>());
     static final Map<String, Method> METHOD_CACHE = new ConcurrentHashMap<String, Method>();
 
     static Class<?> mcClass;
@@ -56,6 +58,7 @@ public class InexSkinAgent {
         volatile long updatedAt;
         volatile String model;
         volatile byte[] png;
+        volatile boolean local;
     }
 
     public static void premain(String args, Instrumentation inst) {
@@ -81,6 +84,7 @@ public class InexSkinAgent {
             en.updatedAt = f.lastModified() > 0 ? f.lastModified() : 1L;
             en.model = SELF_MODEL.isEmpty() ? "slim" : SELF_MODEL;
             en.png = data;
+            en.local = true;
             CACHE.put(SELF_USER, en);
             log("loaded local self-skin for " + SELF_USER + " (" + data.length + " bytes)");
         } catch (Throwable t) {
@@ -93,9 +97,35 @@ public class InexSkinAgent {
 
     static void loop() {
         while (true) {
-            try { tick(); } catch (Throwable e) { logOnce("tick error: " + e); }
+            try {
+                refreshOnlineSync();
+                tick();
+            } catch (Throwable e) {
+                logOnce("tick error: " + e);
+            }
             try { Thread.sleep(2000L); } catch (InterruptedException e) { return; }
         }
+    }
+
+    static void refreshOnlineSync() throws Exception {
+        if (SETTINGS_FILE.isEmpty()) return;
+        File file = new File(SETTINGS_FILE);
+        if (!file.isFile()) return;
+        String value = new String(readAllBytes(new FileInputStream(file)), "UTF-8").trim();
+        if (!"true".equalsIgnoreCase(value) && !"false".equalsIgnoreCase(value)) return;
+        boolean enabled = Boolean.parseBoolean(value);
+        if (ONLINE_SYNC == enabled) return;
+        ONLINE_SYNC = enabled;
+        if (!enabled) {
+            for (Entry entry : CACHE.values()) {
+                if (entry.local) continue;
+                entry.png = null;
+                entry.model = null;
+                entry.updatedAt = 0L;
+                entry.fetchedAt = 0L;
+            }
+        }
+        log("online sync " + (enabled ? "enabled" : "disabled") + " by launcher setting");
     }
 
     static boolean init() {
@@ -147,29 +177,75 @@ public class InexSkinAgent {
 
         // When Online Skin Sync is OFF: ignore all other players (they stay Steve/Alex) & only apply local self-skin!
         if (!ONLINE_SYNC) {
-            if (!key.equals(SELF_USER)) return;
-            if (!CACHE.containsKey(SELF_USER)) preloadSelfLocalSkin();
+            if (!key.equals(SELF_USER)) {
+                if (!APPLIED.containsKey(pi)) return;
+            } else if (!CACHE.containsKey(SELF_USER)) {
+                preloadSelfLocalSkin();
+            }
         } else {
             maybeFetch(key);
         }
 
         final Entry e = CACHE.get(key);
-        if (e == null || e.png == null) return;
-        final String stamp = key + ":" + e.updatedAt;
-        if (stamp.equals(APPLIED.get(pi))) return;
-        APPLIED.put(pi, stamp);
+        final boolean applySkin = e != null && e.png != null && (ONLINE_SYNC || e.local);
+        final String skinStamp = applySkin ? key + ":" + e.updatedAt : null;
+        final boolean needsSkin = applySkin && !skinStamp.equals(APPLIED.get(pi));
+        final boolean needsSkinRestore = !applySkin && APPLIED.containsKey(pi);
+        if (!needsSkin && !needsSkinRestore) return;
+
+        if (needsSkin) APPLIED.put(pi, skinStamp);
         Method exec = getCachedMethod(mc.getClass(), "execute", Runnable.class);
         exec.invoke(mc, new Runnable() {
             public void run() {
                 try {
-                    apply(mc, pi, key, e);
-                    log("skin applied: " + key + (ONLINE_SYNC ? " (online)" : " (local-only)"));
+                    if (needsSkin) {
+                        apply(mc, pi, key, e);
+                        log("skin applied: " + key + (ONLINE_SYNC ? " (online)" : " (local-only)"));
+                    } else if (needsSkinRestore) {
+                        restoreSkin(pi);
+                        log("skin cleared: " + key);
+                    }
                 } catch (Throwable t) {
-                    APPLIED.remove(pi);
-                    logOnce("apply failed for " + key + ": " + t);
+                    if (needsSkin || needsSkinRestore) APPLIED.remove(pi);
+                    logOnce("cosmetic apply failed for " + key + ": " + t);
                 }
             }
         });
+    }
+
+    static Object invokeOneArg(Object target, String name, Object arg) throws Exception {
+        for (Method method : target.getClass().getMethods()) {
+            if (!method.getName().equals(name) || method.getParameterTypes().length != 1) continue;
+            Class<?> parameter = method.getParameterTypes()[0];
+            if (isCompatibleParameter(parameter, arg)) {
+                method.setAccessible(true);
+                return method.invoke(target, arg);
+            }
+        }
+        for (Class<?> type = target.getClass(); type != null; type = type.getSuperclass()) {
+            for (Method method : type.getDeclaredMethods()) {
+                if (!method.getName().equals(name) || method.getParameterTypes().length != 1) continue;
+                Class<?> parameter = method.getParameterTypes()[0];
+                if (isCompatibleParameter(parameter, arg)) {
+                    method.setAccessible(true);
+                    return method.invoke(target, arg);
+                }
+            }
+        }
+        throw new NoSuchMethodException(target.getClass().getName() + "#" + name);
+    }
+
+    static boolean isCompatibleParameter(Class<?> parameter, Object arg) {
+        if (arg == null) return !parameter.isPrimitive();
+        if (parameter.isAssignableFrom(arg.getClass())) return true;
+        return (parameter == boolean.class && arg instanceof Boolean)
+                || (parameter == int.class && arg instanceof Integer)
+                || (parameter == long.class && arg instanceof Long)
+                || (parameter == float.class && arg instanceof Float)
+                || (parameter == double.class && arg instanceof Double)
+                || (parameter == short.class && arg instanceof Short)
+                || (parameter == byte.class && arg instanceof Byte)
+                || (parameter == char.class && arg instanceof Character);
     }
 
     static void maybeFetch(final String key) {
@@ -203,10 +279,14 @@ public class InexSkinAgent {
         c.setRequestProperty("User-Agent", "INEX-Skin-Agent");
         if (c.getResponseCode() != 200) return;
         String body = new String(readAllBytes(c.getInputStream()), "UTF-8");
-        if (body.trim().equals("null")) return;
+        if (body.trim().equals("null")) {
+            en.png = null;
+            en.model = null;
+            en.updatedAt = 0L;
+            return;
+        }
         String b64 = jsonString(body, "skin");
-        if (b64 == null || b64.isEmpty()) return;
-        byte[] png = Base64.getDecoder().decode(b64);
+        byte[] png = b64 == null || b64.isEmpty() ? null : Base64.getDecoder().decode(b64);
         String model = jsonString(body, "model");
         String upd = jsonRaw(body, "updatedAt");
         long u = 1L;
@@ -214,6 +294,7 @@ public class InexSkinAgent {
         en.model = model;
         en.updatedAt = u;
         en.png = png;
+        en.local = false;
     }
 
     static byte[] readAllBytes(InputStream in) throws Exception {
@@ -256,6 +337,7 @@ public class InexSkinAgent {
     static void apply(Object mc, Object pi, String key, Entry e) throws Exception {
         Object original = call(pi, "getSkin");
         if (original == null) throw new IllegalStateException("PlayerInfo.getSkin() null");
+        if (!ORIGINAL_SKINS.containsKey(pi)) ORIGINAL_SKINS.put(pi, original);
 
         Method read = getCachedMethod(nativeImageCls, "read", InputStream.class);
         Object img = read.invoke(null, new ByteArrayInputStream(e.png));
@@ -276,6 +358,12 @@ public class InexSkinAgent {
 
         Object newSkin = rebuildSkin(original, id, e.model);
         setSkin(pi, original.getClass(), newSkin);
+    }
+
+    static void restoreSkin(Object pi) throws Exception {
+        Object original = ORIGINAL_SKINS.remove(pi);
+        if (original != null) setSkin(pi, original.getClass(), original);
+        APPLIED.remove(pi);
     }
 
     static Object newDynamicTexture(Object img) throws Exception {

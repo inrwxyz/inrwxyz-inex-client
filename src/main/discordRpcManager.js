@@ -20,11 +20,13 @@ class DiscordRpcManager {
     this.connecting = false;
     this.connectedUser = null;
     this.sessionStartTimestamp = Math.floor(Date.now() / 1000);
-    this.currentActivity = {
+    this.baseActivity = {
       details: 'In Launcher Menu',
       state: 'INEX CLIENT • Windows Edition',
       startTimestamp: this.sessionStartTimestamp
     };
+    this.currentActivity = { ...this.baseActivity };
+    this.hostedServerInfo = null; // Tracks running local server for combined RPC status
     this.reconnectTimer = null;
     this.retryWithoutAssets = false;
     this.lastError = null;
@@ -32,7 +34,6 @@ class DiscordRpcManager {
 
   _getIpcPath(index = 0) {
     if (process.platform === 'win32') {
-      // On Windows, named pipe paths for Node's net.connect MUST use \\.\pipe\
       return `\\\\.\\pipe\\discord-ipc-${index}`;
     }
     const runtimeDir = process.env.XDG_RUNTIME_DIR || process.env.TMPDIR || process.env.TMP || process.env.TEMP || os.tmpdir();
@@ -73,6 +74,12 @@ class DiscordRpcManager {
     }
     if (this.socket) {
       try {
+        // Clear the presence first so Discord removes it immediately, then close.
+        this.socket.write(this._encodeFrame(1, {
+          cmd: 'SET_ACTIVITY',
+          args: { pid: process.pid, activity: null },
+          nonce: crypto.randomBytes(8).toString('hex')
+        }));
         this.socket.write(this._encodeFrame(2, {}));
         this.socket.destroy();
       } catch (_) {}
@@ -100,7 +107,7 @@ class DiscordRpcManager {
     }
 
     let handshakeDone = false;
-    let aborted = false; // set when Discord itself rejects us (e.g. bad client id) -> no point trying other pipes
+    let aborted = false;
     let buffer = Buffer.alloc(0);
 
     const cleanupAndTryNext = () => {
@@ -123,14 +130,12 @@ class DiscordRpcManager {
 
     sock.once('connect', () => {
       try {
-        // Opcode 0 = HANDSHAKE
         sock.write(this._encodeFrame(0, { v: 1, client_id: DISCORD_CLIENT_ID }));
       } catch (_) {
         cleanupAndTryNext();
       }
     });
 
-    // Discord can send several frames in one chunk, or one frame split over several chunks -> buffer + parse in a loop.
     sock.on('data', chunk => {
       buffer = Buffer.concat([buffer, chunk]);
       while (buffer.length >= 8) {
@@ -150,12 +155,10 @@ class DiscordRpcManager {
           payload = JSON.parse(body.toString('utf8'));
         } catch (_) {}
 
-        // 3 = PING -> must answer with 4 = PONG or Discord drops the connection
         if (opcode === 3) {
           try { sock.write(this._encodeFrame(4, payload || {})); } catch (_) {}
           continue;
         }
-        // 2 = CLOSE (invalid client id, etc.)
         if (opcode === 2) {
           this.lastError = (payload && payload.message) || 'Discord closed the connection';
           aborted = true;
@@ -165,7 +168,6 @@ class DiscordRpcManager {
         }
 
         if (opcode === 1 && payload) {
-          // READY event = handshake accepted
           if (!handshakeDone && payload.evt === 'READY') {
             handshakeDone = true;
             this.socket = sock;
@@ -188,7 +190,6 @@ class DiscordRpcManager {
               return;
             }
             this.lastError = msg;
-            // Discord rejected the activity because an image asset does not exist in the Developer Portal
             if (msg.toLowerCase().includes('asset') && !this.retryWithoutAssets) {
               this.retryWithoutAssets = true;
               this._sendCurrentActivity();
@@ -208,10 +209,36 @@ class DiscordRpcManager {
     });
   }
 
+  _rebuildEffectiveActivity() {
+    const srv = this.hostedServerInfo;
+    if (srv && (srv.status === 'online' || srv.status === 'starting')) {
+      const loaderLabel = (srv.loader || 'server').charAt(0).toUpperCase() + (srv.loader || 'server').slice(1);
+      const pCount = Array.isArray(srv.players) ? srv.players.length : 0;
+      const maxP = srv.maxPlayers || 20;
+      const statusPart = srv.status === 'starting'
+        ? 'Starting Server...'
+        : `${pCount}/${maxP} Players Online`;
+      const addrPart = srv.publicAddress ? ` • ${srv.publicAddress}` : '';
+
+      const isPlaying = this.baseActivity && String(this.baseActivity.details || '').startsWith('Playing Minecraft');
+      this.currentActivity = {
+        details: isPlaying
+          ? `${this.baseActivity.details} | Hosting: ${srv.name}`
+          : `Hosting: ${srv.name} (${loaderLabel} ${srv.version})`,
+        state: `${statusPart}${addrPart}`,
+        startTimestamp: srv.startedAt ? Math.floor(srv.startedAt / 1000) : this.sessionStartTimestamp
+      };
+    } else {
+      this.currentActivity = { ...this.baseActivity };
+    }
+  }
+
   _sendCurrentActivity() {
     const settings = this.settingsManager.getSettings();
     if (!settings.discordRpcEnabled) return;
     if (!this.connected || !this.socket) return;
+
+    this._rebuildEffectiveActivity();
 
     const activityObj = {
       details: this.currentActivity.details || 'In Launcher Menu',
@@ -222,13 +249,12 @@ class DiscordRpcManager {
       instance: false
     };
 
-    // Only attach large_image if not flagged as rejected
     if (!this.retryWithoutAssets) {
       activityObj.assets = {
         large_image: 'inex_logo',
         large_text: 'INEX CLIENT — Windows Minecraft Launcher',
         small_image: 'minecraft',
-        small_text: 'INEX Runtime'
+        small_text: this.hostedServerInfo ? 'Hosting INEX Server' : 'INEX Runtime'
       };
     }
 
@@ -250,13 +276,14 @@ class DiscordRpcManager {
 
   setLauncherMenuPresence(activeProfile = null) {
     const settings = this.settingsManager.getSettings();
-    this.currentActivity = {
+    this.baseActivity = {
       details: activeProfile
         ? `Ready: ${activeProfile.name} (${activeProfile.version})`
         : 'In Launcher Menu',
       state: settings.discordStatusText || 'INEX CLIENT • Windows Edition',
       startTimestamp: this.sessionStartTimestamp
     };
+    this._rebuildEffectiveActivity();
     if (settings.discordRpcEnabled) {
       if (!this.connected && !this.connecting) {
         this.start();
@@ -271,13 +298,30 @@ class DiscordRpcManager {
     const loaderName = profile.loader
       ? profile.loader.charAt(0).toUpperCase() + profile.loader.slice(1)
       : 'Vanilla';
-    this.currentActivity = {
+    this.baseActivity = {
       details: `Playing Minecraft ${profile.version} (${loaderName})`,
       state: `Profile: ${profile.name} • ${account ? account.username : 'Player'}`,
       startTimestamp: Math.floor(Date.now() / 1000)
     };
+    this._rebuildEffectiveActivity();
     if (settings.discordRpcEnabled) {
       this._sendCurrentActivity();
+    }
+  }
+
+  /**
+   * Updates Discord Rich Presence when a local INEX server starts, stops, or changes player count.
+   */
+  setServerPresence(serverInfo = null) {
+    this.hostedServerInfo = serverInfo;
+    this._rebuildEffectiveActivity();
+    const settings = this.settingsManager.getSettings();
+    if (settings.discordRpcEnabled) {
+      if (!this.connected && !this.connecting) {
+        this.start();
+      } else {
+        this._sendCurrentActivity();
+      }
     }
   }
 

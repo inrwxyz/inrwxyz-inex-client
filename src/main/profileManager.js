@@ -12,8 +12,10 @@ class ProfileManager {
     this.settingsManager = settingsManager;
     this.profilesFile = path.join(this.settingsManager.getSettings().configDir, 'profiles.json');
     this.hudModsDir = path.join(this.settingsManager.getSettings().configDir, 'hud-mods');
+    this.defaultModsDir = path.join(this.settingsManager.getSettings().configDir, 'default-mods');
     try {
       fs.mkdirSync(this.hudModsDir, { recursive: true });
+      fs.mkdirSync(this.defaultModsDir, { recursive: true });
     } catch (_) {}
     try {
       const gameDataDir = this.settingsManager.getSettings().gameDataDir;
@@ -61,9 +63,25 @@ class ProfileManager {
   }
 
   _collectHudJarFiles(mcVersion) {
-    const dirs = [this.hudModsDir];
-    if (mcVersion) dirs.push(path.join(this.hudModsDir, String(mcVersion)));
+    const roots = [this.hudModsDir, this.defaultModsDir];
+    const appDefaultRoots = [
+      path.resolve(__dirname, '..', 'default-mods'),
+      path.resolve(__dirname, '..', '..', 'src', 'default-mods'),
+      path.resolve(__dirname, '..', '..', '..', 'src', 'default-mods')
+    ];
+    for (const dir of appDefaultRoots) {
+      if (dir && !roots.includes(dir)) roots.push(dir);
+    }
+
+    const dirs = [];
+    for (const root of roots) {
+      if (!root) continue;
+      dirs.push(root);
+      if (mcVersion) dirs.push(path.join(root, String(mcVersion)));
+    }
+
     const files = [];
+    const seen = new Set();
     for (const dir of dirs) {
       try {
         if (!fs.existsSync(dir)) continue;
@@ -71,7 +89,11 @@ class ProfileManager {
           if (!entry.toLowerCase().endsWith('.jar')) continue;
           if (AGENT_JAR_NAMES.includes(entry.toLowerCase())) continue;
           const full = path.join(dir, entry);
-          if (fs.statSync(full).isFile()) files.push({ fileName: entry, fullPath: full });
+          if (!fs.statSync(full).isFile()) continue;
+          const key = `${dir}:${entry}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          files.push({ fileName: entry, fullPath: full });
         }
       } catch (_) {}
     }
@@ -99,9 +121,11 @@ class ProfileManager {
     if (!profile || !profile.gameDir) return [];
 
     const modsDir = path.join(profile.gameDir, 'mods');
+    const configDir = path.join(profile.gameDir, 'config');
     const trackFile = path.join(profile.gameDir, 'inex-hud-attached.json');
     try {
       fs.mkdirSync(modsDir, { recursive: true });
+      fs.mkdirSync(configDir, { recursive: true });
     } catch (_) {
       return [];
     }
@@ -112,9 +136,10 @@ class ProfileManager {
         if (fs.existsSync(p)) fs.unlinkSync(p);
       } catch (_) {}
     }
+
+    const hudConfigPath = path.join(configDir, 'inex-hud.json');
     try {
-      const legacyCfg = path.join(profile.gameDir, 'config', 'inex-hud.json');
-      if (fs.existsSync(legacyCfg)) fs.unlinkSync(legacyCfg);
+      if (fs.existsSync(hudConfigPath)) fs.unlinkSync(hudConfigPath);
     } catch (_) {}
 
     let tracked = [];
@@ -132,7 +157,9 @@ class ProfileManager {
         if (chosenJar && chosenJar !== '__none__' && f.fileName !== chosenJar) continue;
         const info = inspectHudJar(f.fullPath);
         const compat = checkHudCompat(info, profile.loader, profile.version);
-        if (!compat.ok) {
+        const sourceIsDefaultMod = [this.defaultModsDir, path.resolve(__dirname, '..', 'default-mods'), path.resolve(__dirname, '..', '..', 'src', 'default-mods')]
+          .some(root => f.fullPath.startsWith(String(root))) || path.basename(f.fullPath).includes('inex-client-hud');
+        if (!compat.ok && !sourceIsDefaultMod) {
           this.lastHudSkipped.push({ fileName: f.fileName, reason: compat.reason });
           continue;
         }
@@ -159,6 +186,14 @@ class ProfileManager {
 
     try {
       fs.writeFileSync(trackFile, JSON.stringify({ files: attached }, null, 2), 'utf8');
+      if (attached.length || profile.loader !== 'vanilla') {
+        const hudJson = {
+          showNametagLogo: true,
+          activeHudJar: attached[0] || chosenJar || '',
+          attachedFiles: attached
+        };
+        fs.writeFileSync(hudConfigPath, JSON.stringify(hudJson, null, 2), 'utf8');
+      }
     } catch (_) {}
     return attached;
   }

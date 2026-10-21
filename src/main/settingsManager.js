@@ -3,7 +3,6 @@ const path = require('path');
 const os = require('os');
 
 const DISCORD_CLIENT_ID = '1560619751607247011';
-const DEFAULT_SKIN_DB_URL = 'https://inex-cosmetics-default-rtdb.firebaseio.com/cosmetics/';
 
 class SettingsManager {
   constructor(baseDataDir) {
@@ -23,25 +22,23 @@ class SettingsManager {
       closeBehavior: 'keep-open',
       autoJavaProvision: true,
       showSnapshots: false,
-      // Performance & Skin Sync Controls
       enableSkinSync: true,
-      launcherAnimations: true,
-      skinDatabaseUrl: DEFAULT_SKIN_DB_URL,
-      // Discord Rich Presence
       discordRpcEnabled: true,
       discordClientId: DISCORD_CLIENT_ID,
       discordStatusText: 'INEX CLIENT',
-      // Glassmorphism UI customization
       glassIntensity: 24,
       customLogoDataUrl: '',
-      // Directories
       gameDataDir: path.join(appData, '.inexclient'),
       installDir: path.join(localAppData, 'InexClient'),
       configDir: this.configDir,
       javaDir: path.join(this.configDir, 'runtimes'),
       customJavaPath: '',
+      defaultJavaRuntime: 'auto',
       activeHudJar: '',
-      jvmExtraArgs: '-XX:+IgnoreUnrecognizedVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M'
+      hudConfig: {
+        showNametagLogo: true,
+      },
+      jvmExtraArgs: '-XX:+IgnoreUnrecognizedVMOptions -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M',
     };
 
     this.settings = this._load();
@@ -116,12 +113,7 @@ class SettingsManager {
 
     validated.autoJavaProvision = input.autoJavaProvision !== undefined ? Boolean(input.autoJavaProvision) : true;
     validated.showSnapshots = Boolean(input.showSnapshots);
-
     validated.enableSkinSync = input.enableSkinSync !== undefined ? Boolean(input.enableSkinSync) : true;
-    validated.launcherAnimations = input.launcherAnimations !== undefined ? Boolean(input.launcherAnimations) : true;
-    validated.skinDatabaseUrl = typeof input.skinDatabaseUrl === 'string' && input.skinDatabaseUrl.trim()
-      ? input.skinDatabaseUrl.trim()
-      : DEFAULT_SKIN_DB_URL;
 
     validated.discordRpcEnabled = input.discordRpcEnabled !== undefined ? Boolean(input.discordRpcEnabled) : true;
     validated.discordClientId = DISCORD_CLIENT_ID;
@@ -147,10 +139,20 @@ class SettingsManager {
       validated.javaDir = path.resolve(input.javaDir.trim());
     }
     validated.customJavaPath = typeof input.customJavaPath === 'string' ? input.customJavaPath.trim() : '';
+    validated.defaultJavaRuntime = typeof input.defaultJavaRuntime === 'string' && input.defaultJavaRuntime.trim()
+      ? input.defaultJavaRuntime.trim()
+      : 'auto';
     validated.jvmExtraArgs = typeof input.jvmExtraArgs === 'string' ? input.jvmExtraArgs.trim() : this.defaults.jvmExtraArgs;
 
     validated.activeHudJar = typeof input.activeHudJar === 'string' ? input.activeHudJar.trim() : '';
-    delete validated.hudConfig;
+
+    const nextHudConfig = {
+      ...(this.defaults.hudConfig || {}),
+      ...(input && typeof input.hudConfig === 'object' && input.hudConfig ? input.hudConfig : {})
+    };
+    validated.hudConfig = {
+      showNametagLogo: nextHudConfig.showNametagLogo !== false,
+    };
 
     return validated;
   }
@@ -188,4 +190,4 @@ class SettingsManager {
   }
 }
 
-module.exports = { SettingsManager, DISCORD_CLIENT_ID, DEFAULT_SKIN_DB_URL };
+module.exports = { SettingsManager, DISCORD_CLIENT_ID };

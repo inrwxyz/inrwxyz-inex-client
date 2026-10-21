@@ -272,6 +272,14 @@ class JavaManager {
     const installed = this.detectInstalledRuntimes();
     const req = Number(requiredMajor) || 21;
 
+    // A profile left on "auto" follows the Java chosen in Settings -> Java runtime (if any).
+    if (!preferredSetting || preferredSetting === 'auto') {
+      try {
+        const chosen = this.settingsManager.getSettings().defaultJavaRuntime;
+        if (chosen && chosen !== 'auto') preferredSetting = chosen;
+      } catch (_) {}
+    }
+
     if (preferredSetting && preferredSetting !== 'auto') {
       const custom = this.probeJavaBinary(preferredSetting);
       if (custom) {

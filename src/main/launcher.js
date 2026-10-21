@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 
+const SERVER_ADDR_RE = /^[A-Za-z0-9.\-]+(:\d{1,5})?$/;
+
 class MinecraftLauncher {
   constructor({ settingsManager, profileManager, versionManager, loaderManager, javaManager, accountManager, installer, discordRpcManager }) {
     this.settingsManager = settingsManager;
@@ -41,35 +43,36 @@ class MinecraftLauncher {
     }
   }
 
-  _supportsSkinAgent(version) {
-    const v = String(version || '').trim();
-    if (/^2[6-9]w/i.test(v)) return true;
-    const major = parseInt(v.split('.')[0], 10);
-    return Number.isFinite(major) && major >= 26;
-  }
-
-  _prepareSkinAgent(settings) {
-    try {
-      const name = 'inex-cosmetics-agent.jar';
-      const target = path.join(settings.configDir, 'agent', name);
-      const candidates = [
-        path.join(__dirname, 'agent', name),
-        path.join(__dirname, '..', 'agent', name),
-        path.join(__dirname, name),
-        path.join(__dirname, '..', name)
-      ];
-      const src = candidates.find(p => fs.existsSync(p));
-      if (src) {
-        fs.mkdirSync(path.dirname(target), { recursive: true });
-        fs.copyFileSync(src, target);
-      }
-      return fs.existsSync(target) ? target : null;
-    } catch (_) {
-      return null;
+  _findCosmeticsAgentJar() {
+    const resourcesPath = process.resourcesPath || '';
+    const candidates = [
+      path.join(resourcesPath, 'app.asar.unpacked', 'src', 'main', 'agent', 'inex-cosmetics-agent.jar'),
+      path.join(__dirname, 'agent', 'inex-cosmetics-agent.jar'),
+      path.join(__dirname, 'inex-cosmetics-agent.jar'),
+      path.join(__dirname, '..', 'inex-cosmetics-agent.jar'),
+      path.join(__dirname, '..', '..', 'inex-cosmetics-agent.jar'),
+      path.join(resourcesPath, 'inex-cosmetics-agent.jar'),
+      path.join(resourcesPath, 'app.asar.unpacked', 'inex-cosmetics-agent.jar')
+    ];
+    for (const c of candidates) {
+      try {
+        if (c && fs.existsSync(c)) return c;
+      } catch (_) {}
     }
+    return null;
   }
 
-  buildLaunchArguments({ profile, mergedMeta, account, settings, javaMajor = 21 }) {
+  _isQuickPlaySupported(mcVersion) {
+    const v = String(mcVersion || '').trim();
+    const m = v.match(/^(\d+)\.(\d+)/);
+    if (!m) return true;
+    const major = Number(m[1]);
+    const minor = Number(m[2]);
+    if (major > 1) return true; // e.g. 26.3
+    return major === 1 && minor >= 20;
+  }
+
+  buildLaunchArguments({ profile, mergedMeta, account, settings, javaMajor = 21, joinServer = null }) {
     const gameDataDir = settings.gameDataDir;
     const librariesDir = path.join(gameDataDir, 'libraries');
     const versionDir = path.join(gameDataDir, 'versions', profile.version);
@@ -81,66 +84,48 @@ class MinecraftLauncher {
     const { classpathEntries } = this.installer.collectRequiredLibraries(mergedMeta, 'windows');
     const cpSeparator = process.platform === 'win32' ? ';' : ':';
 
-    const isSkinSyncEnabled = settings.enableSkinSync !== false;
-
-    // Only include cosmeticsOverrideJar if Skin Sync is ON and it exists (for older <26 versions)
-    const cosmeticsOverrideJar = (isSkinSyncEnabled && profile.gameDir)
-      ? path.join(profile.gameDir, 'inex-cosmetics-override.jar')
-      : null;
-    const hasCosmeticsOverride = Boolean(cosmeticsOverrideJar && fs.existsSync(cosmeticsOverrideJar));
-
+    const overrideJar = path.join(profile.gameDir, 'inex-cosmetics-override.jar');
     const orderedClasspath = [
-      ...(hasCosmeticsOverride ? [cosmeticsOverrideJar] : []),
+      ...(fs.existsSync(overrideJar) ? [overrideJar] : []),
       ...classpathEntries,
       clientJarPath
     ];
     const fullClasspath = [...new Set(orderedClasspath)].join(cpSeparator);
 
     const ramMB = profile.ramMB || settings.defaultRamMB || 4096;
-    const minRamMB = Math.min(2048, Math.max(1024, Math.floor(ramMB / 2)));
+    const minRamMB = Math.min(1024, Math.floor(ramMB / 2));
 
-    // High-FPS optimized JVM arguments (prevents GC pauses & stutters)
+    const extraJvm = (settings.jvmExtraArgs || '')
+      .split(/\s+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
     const jvmArgs = [
       '-XX:+IgnoreUnrecognizedVMOptions',
-      '-XX:+UnlockExperimentalVMOptions',
       `-Xmx${ramMB}M`,
-      `-Xms${minRamMB}M`,
-      '-XX:+UseG1GC',
-      '-XX:+ParallelRefProcEnabled',
-      '-XX:MaxGCPauseMillis=37',
-      '-XX:+DisableExplicitGC',
-      '-XX:+AlwaysPreTouch',
-      '-XX:G1NewSizePercent=20',
-      '-XX:G1ReservePercent=20',
-      '-XX:G1HeapRegionSize=32M',
-      '-XX:G1MixedGCCountTarget=4',
-      '-XX:InitiatingHeapOccupancyPercent=15',
-      '-XX:G1MixedGCLiveThresholdPercent=90',
-      '-Dsun.rmi.dgc.server.gcInterval=2147483646'
+      `-Xms${minRamMB}M`
     ];
-
-    // STRICT CHECK: ONLY attach Java Skin Agent when Skin Sync is ON!
-    // When OFF, zero agent is attached -> 100% disconnected from Firebase, default skins for everyone, MAX FPS!
-    if (isSkinSyncEnabled && this._supportsSkinAgent(profile.version)) {
-      const agentJar = this._prepareSkinAgent(settings);
-      if (agentJar) {
-        const activeSlot = this.accountManager.getActiveSkinSlot ? this.accountManager.getActiveSkinSlot() : { model: 'slim' };
-        const localSkinFile = path.join(profile.gameDir, 'inex-local-skin.png');
-        const dbUrl = settings.skinDatabaseUrl || 'https://inex-cosmetics-default-rtdb.firebaseio.com/cosmetics/';
-
-        jvmArgs.push(
-          '-Dinex.skin.online=true',
-          `-Dinex.skin.self=${String(account.username || 'Player').toLowerCase()}`,
-          `-Dinex.skin.selfFile=${localSkinFile}`,
-          `-Dinex.skin.selfModel=${activeSlot.model || 'slim'}`,
-          `-Dinex.skin.db=${dbUrl}`,
-          `-javaagent:${agentJar}`
-        );
-      }
-    }
 
     if (javaMajor >= 21) {
       jvmArgs.push('--enable-native-access=ALL-UNNAMED');
+    }
+
+    for (const flag of extraJvm) {
+      if (!jvmArgs.includes(flag)) {
+        jvmArgs.push(flag);
+      }
+    }
+
+    if (settings.enableSkinSync !== false) {
+      const agentJar = this._findCosmeticsAgentJar();
+      if (agentJar) {
+        jvmArgs.push(
+          `-javaagent:${agentJar}`,
+          '-Dinex.skin.online=true',
+          `-Dinex.skin.settingsFile=${path.join(profile.gameDir, 'inex-cosmetics-settings.txt')}`,
+          `-Dinex.skin.self=${(account.username || '').toLowerCase()}`
+        );
+      }
     }
 
     const templateVars = {
@@ -185,10 +170,8 @@ class MinecraftLauncher {
           continue;
         }
         if (entry.startsWith('-Djava.library.path=')) continue;
-        // Skip duplicate GC flags from Mojang manifest so our optimized GC flags take priority
-        if (entry.startsWith('-XX:+UseG1GC') || entry.startsWith('-XX:MaxGCPauseMillis') || entry.startsWith('-XX:G1')) continue;
         const resolved = replaceVars(entry);
-        if (!resolved.includes('${') && !jvmArgs.includes(resolved)) {
+        if (!resolved.includes('${')) {
           jvmArgs.push(resolved);
         }
       }
@@ -207,7 +190,9 @@ class MinecraftLauncher {
 
     let gameArgs = [];
     if (mergedMeta.minecraftArguments) {
-      gameArgs = mergedMeta.minecraftArguments.split(/\s+/).map(replaceVars);
+      gameArgs = mergedMeta.minecraftArguments
+        .split(/\s+/)
+        .map(replaceVars);
     } else {
       gameArgs = [
         '--username', templateVars.auth_player_name,
@@ -234,6 +219,20 @@ class MinecraftLauncher {
     } else {
       gameArgs.push('--width', String(settings.windowWidth || 1280));
       gameArgs.push('--height', String(settings.windowHeight || 720));
+    }
+
+    if (joinServer !== null && joinServer !== undefined && String(joinServer).trim() !== '') {
+      const cleanAddr = String(joinServer).trim();
+      if (!SERVER_ADDR_RE.test(cleanAddr)) {
+        throw new Error(`Invalid server address: "${cleanAddr}"`);
+      }
+      const [host, portStr] = cleanAddr.split(':');
+      const port = portStr || '25565';
+      if (this._isQuickPlaySupported(profile.version)) {
+        gameArgs.push('--quickPlayMultiplayer', `${host}:${port}`);
+      } else {
+        gameArgs.push('--server', host, '--port', String(port));
+      }
     }
 
     return {
@@ -263,10 +262,16 @@ class MinecraftLauncher {
     return result;
   }
 
-  async launchProfile(profileId, { onProgress = () => {}, onLog = () => {}, onExit = () => {} } = {}) {
-    const profile = this.profileManager.getProfileById(profileId);
+  async launchProfile(profileId, { joinServer = null, onProgress = () => {}, onLog = () => {}, onExit = () => {} } = {}) {
+    const profile = profileId ? this.profileManager.getProfileById(profileId) : this.profileManager.getActiveProfile();
     if (!profile) {
       throw new Error('No profile selected. Please create or select a profile first.');
+    }
+
+    if (joinServer !== null && joinServer !== undefined && String(joinServer).trim() !== '') {
+      if (!SERVER_ADDR_RE.test(String(joinServer).trim())) {
+        throw new Error('Invalid server address.');
+      }
     }
 
     if (this.isProfileRunning(profile.id)) {
@@ -280,6 +285,9 @@ class MinecraftLauncher {
         level: 'info',
         line: `[INEX HUD] Attached HUD mod(s): ${attachedHudJars.join(', ')}`
       });
+    }
+    for (const sk of (this.profileManager.lastHudSkipped || [])) {
+      onLog({ profileId: profile.id, level: 'warn', line: `[INEX HUD] Skipped ${sk.fileName}: ${sk.reason}` });
     }
 
     if (!this.profileManager.verifyInstallationState(profile)) {
@@ -317,10 +325,15 @@ class MinecraftLauncher {
     }
 
     if (!this.loaderManager.isValidLoaderMainClass(profile.loader, mergedMeta.mainClass)) {
-      throw new Error(`Cannot launch: ${profile.loader.toUpperCase()} mainClass (${mergedMeta.mainClass}) is invalid for Minecraft${profile.version}.`);
+      throw new Error(`Cannot launch: ${profile.loader.toUpperCase()} mainClass (${mergedMeta.mainClass}) is invalid for Minecraft ${profile.version}.`);
     }
 
     const requiredJava = this.versionManager.getRequiredJavaMajor(profile.version, mergedMeta);
+    onLog({
+      profileId: profile.id,
+      level: 'info',
+      line: `[INEX] Verifying Java ${requiredJava} runtime for Minecraft ${profile.version}...`
+    });
     const javaResolution = await this.javaManager.ensureJavaForVersion(
       requiredJava,
       profile.javaRuntime,
@@ -342,19 +355,23 @@ class MinecraftLauncher {
     }
 
     fs.mkdirSync(profile.gameDir, { recursive: true });
-
     const settings = this.settingsManager.getSettings();
-    const isSkinSyncEnabled = settings.enableSkinSync !== false;
 
     try {
-      this.accountManager.applyLocalCosmeticsToGameDir(profile.gameDir, profile.version);
-      onLog({
-        profileId: profile.id,
-        level: 'info',
-        line: isSkinSyncEnabled
-          ? '[INEX SKIN] Online Skin Sync ENABLED (Firebase Cloud & Skin Agent Active).'
-          : '[INEX FPS BOOST] Skin Sync is OFF — Firebase & Skin Agent 100% disabled for Max FPS!'
-      });
+      this.accountManager.applyLocalCosmeticsToGameDir(profile.gameDir);
+      if (settings.enableSkinSync === false) {
+        onLog({
+          profileId: profile.id,
+          level: 'info',
+          line: '[INEX COSMETICS] Skin Sync is OFF (Max FPS). Firebase & custom cosmetics disabled; using default skins.'
+        });
+      } else {
+        onLog({
+          profileId: profile.id,
+          level: 'info',
+          line: '[INEX COSMETICS] Skin synced to the INEX cosmetics database.'
+        });
+      }
     } catch (cosmErr) {
       onLog({
         profileId: profile.id,
@@ -370,19 +387,42 @@ class MinecraftLauncher {
       accessToken: '0'
     };
 
-    const { fullArgs } = this.buildLaunchArguments({
+    const { fullArgs, mainClass } = this.buildLaunchArguments({
       profile,
       mergedMeta,
       account,
       settings,
-      javaMajor: javaResolution.runtime.major
+      javaMajor: javaResolution.runtime.major,
+      joinServer
     });
+
+    try {
+      const { classpathEntries } = this.installer.collectRequiredLibraries(mergedMeta, 'windows');
+      const missing = classpathEntries.filter(p => !fs.existsSync(p));
+      if (missing.length > 0) {
+        onLog({ profileId: profile.id, level: 'warn', line: `[INEX] WARNING: ${missing.length} library file(s) missing on disk:` });
+        for (const m of missing.slice(0, 8)) {
+          onLog({ profileId: profile.id, level: 'warn', line: `[INEX]   missing -> ${m}` });
+        }
+      }
+      if (profile.loader === 'forge') {
+        const hasJopt = classpathEntries.some(p => /jopt-simple/i.test(p));
+        onLog({ profileId: profile.id, level: hasJopt ? 'info' : 'warn', line: `[INEX] jopt-simple in classpath: ${hasJopt ? 'yes' : 'NO (Forge will crash)'}` });
+      }
+    } catch (_) {}
 
     onLog({
       profileId: profile.id,
       level: 'info',
-      line: `[INEX] Launching Minecraft ${profile.version} (${profile.loader.toUpperCase()}) with Java${javaResolution.runtime.major}...`
+      line: `[INEX] Launching Minecraft ${profile.version} (${profile.loader.toUpperCase()}) with Java ${javaResolution.runtime.major} (${javaResolution.runtime.version} @ ${javaResolution.runtime.path})...`
     });
+    if (joinServer) {
+      onLog({
+        profileId: profile.id,
+        level: 'info',
+        line: `[INEX] Auto-joining server: ${joinServer}`
+      });
+    }
 
     const child = spawn(javaResolution.runtime.path, fullArgs, {
       cwd: profile.gameDir,
@@ -396,34 +436,21 @@ class MinecraftLauncher {
       this.discordRpcManager.setPlayingGamePresence(profile, account);
     }
 
-    // Throttled log buffer so heavy Minecraft console output never lags Electron IPC or the CPU
-    let logQueue = [];
-    let logTimer = null;
-    const flushLogs = () => {
-      logTimer = null;
-      if (logQueue.length === 0) return;
-      const batch = logQueue.splice(0, 15);
-      logQueue = [];
-      for (const item of batch) {
-        onLog(item);
-      }
-    };
-
-    const queueLog = (level, chunk) => {
+    child.stdout.on('data', chunk => {
       const lines = String(chunk).split(/\r?\n/).filter(Boolean);
       for (const line of lines) {
-        logQueue.push({ profileId: profile.id, level, line });
+        onLog({ profileId: profile.id, level: 'info', line });
       }
-      if (!logTimer) {
-        logTimer = setTimeout(flushLogs, 200);
-      }
-    };
+    });
 
-    child.stdout.on('data', chunk => queueLog('info', chunk));
-    child.stderr.on('data', chunk => queueLog('error', chunk));
+    child.stderr.on('data', chunk => {
+      const lines = String(chunk).split(/\r?\n/).filter(Boolean);
+      for (const line of lines) {
+        onLog({ profileId: profile.id, level: 'error', line });
+      }
+    });
 
     child.on('error', err => {
-      if (logTimer) clearTimeout(logTimer);
       this.runningProcesses.delete(profile.id);
       if (this.discordRpcManager) {
         this.discordRpcManager.setLauncherMenuPresence(this.profileManager.getActiveProfile());
@@ -437,8 +464,6 @@ class MinecraftLauncher {
     });
 
     child.on('close', code => {
-      if (logTimer) clearTimeout(logTimer);
-      flushLogs();
       this.runningProcesses.delete(profile.id);
       if (this.discordRpcManager) {
         this.discordRpcManager.setLauncherMenuPresence(this.profileManager.getActiveProfile());
@@ -456,6 +481,7 @@ class MinecraftLauncher {
       pid: child.pid,
       profileId: profile.id,
       profileName: profile.name,
+      joinServer: joinServer || null,
       java: javaResolution.runtime,
       account: {
         username: account.username,

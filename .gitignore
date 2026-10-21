@@ -1,6 +1,15 @@
 node_modules/
 dist/
+dist-ui/
+release/
 *.log
 .env
 *.exe
 *.blockmap
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/gen/
+src-tauri/backend/
+src-tauri/binaries/
+*.key
