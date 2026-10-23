@@ -380,6 +380,14 @@ pub fn run() {
     let for_exit = sidecar.clone();
 
     tauri::Builder::default()
+        // Must be the FIRST plugin: a second launch exits right away and just brings the running window to the front.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())

@@ -426,10 +426,12 @@ class MinecraftLauncher {
 
     const child = spawn(javaResolution.runtime.path, fullArgs, {
       cwd: profile.gameDir,
-      windowsHide: false
+      windowsHide: false,
+      detached: true // keep the game running even if the launcher is closed
     });
 
     this.runningProcesses.set(profile.id, child);
+    try { child.unref(); } catch (_) {}
     this.profileManager.updateProfile(profile.id, { lastPlayed: new Date().toISOString() });
 
     if (this.discordRpcManager) {

@@ -14,7 +14,7 @@ const { ModrinthManager } = require('./src/main/modrinthManager');
 const { DiscordRpcManager } = require('./src/main/discordRpcManager');
 const { ServerManager } = require('./src/main/serverManager');
 const { PlayitManager } = require('./src/main/playitManager');
-const { OnlineManager } = require('./src/main/onlineManager');
+const { CodeAccess } = require('./src/main/codeAccess');
 const { initAppUpdater } = require('./src/main/appUpdater');
 
 let mainWindow = null;
@@ -63,7 +63,7 @@ app.whenReady().then(() => {
   const modrinthManager = new ModrinthManager({ settingsManager, profileManager });
   const serverManager = new ServerManager({ settingsManager, versionManager, javaManager });
   const playitManager = new PlayitManager({ settingsManager });
-  const onlineManager = new OnlineManager({ settingsManager, accountManager });
+  const codeAccess = new CodeAccess({ settingsManager });
 
   discordRpcManager.start();
   discordRpcManager.setLauncherMenuPresence(profileManager.getActiveProfile());
@@ -390,8 +390,8 @@ app.whenReady().then(() => {
   ipcMain.handle('servers:network', (_, id) => serverManager.getNetwork(id));
 
   // Host-side executor for Remote Server Editor
-  onlineManager.setServerProvider(() => serverManager.listServers());
-  onlineManager.setRemoteExecutor(async (method, args) => {
+  codeAccess.setServerProvider(() => serverManager.listServers());
+  codeAccess.setRemoteExecutor(async (method, args) => {
     const srvId = args[0];
     switch (method) {
       case 'listServers': return serverManager.listServers();
@@ -417,15 +417,13 @@ app.whenReady().then(() => {
     }
   });
 
-  onlineManager.on('editor-access-request', data => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('event:editor-access-request', data);
-    }
+  codeAccess.on('state', data => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('event:access-state', data);
   });
-  onlineManager.on('p2p-expect', data => {
+  codeAccess.on('p2p-expect', data => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('event:p2p-expect', data);
   });
-  onlineManager.on('p2p-kick', data => {
+  codeAccess.on('p2p-kick', data => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('event:p2p-kick', data);
   });
 
@@ -449,35 +447,21 @@ app.whenReady().then(() => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('event:server-log', d);
   });
 
-  // ---- Online, Friends, Co-host & P2P Remote Editor IPC ----
-  ipcMain.handle('online:status', () => onlineManager.getStatus());
-  ipcMain.handle('online:claim', (_, pw) => onlineManager.claim(pw));
-  ipcMain.handle('online:login', (_, pw) => onlineManager.login(pw));
-  ipcMain.handle('online:logout', () => onlineManager.logout());
-  ipcMain.handle('online:loginAs', (_, name, pw) => onlineManager.loginAs(name, pw));
-  ipcMain.handle('online:delete', (_, pw) => onlineManager.deleteOnline(pw));
-  ipcMain.handle('online:changePassword', (_, o, n) => onlineManager.changePassword(o, n));
-  ipcMain.handle('friends:list', () => onlineManager.listFriends());
-  ipcMain.handle('friends:requests', () => onlineManager.listRequests());
-  ipcMain.handle('friends:send', (_, name) => onlineManager.sendRequest(name));
-  ipcMain.handle('friends:accept', (_, uid) => onlineManager.acceptRequest(uid));
-  ipcMain.handle('friends:decline', (_, uid) => onlineManager.declineRequest(uid));
-  ipcMain.handle('friends:remove', (_, uid) => onlineManager.removeFriend(uid));
-  ipcMain.handle('cohost:revoke', (_, uid) => onlineManager.revokeAccess(uid));
-  ipcMain.handle('cohost:list', () => onlineManager.listGrants());
-  ipcMain.handle('cohost:invite', (_, uid, serverIds) => onlineManager.sendAccessInvite(uid, serverIds));
-  ipcMain.handle('cohost:invites', () => onlineManager.listAccessInvites());
-  ipcMain.handle('cohost:accept', (_, uid) => onlineManager.acceptAccessInvite(uid));
-  ipcMain.handle('cohost:decline', (_, uid) => onlineManager.declineAccessInvite(uid));
-  ipcMain.handle('cohost:leave', (_, uid) => onlineManager.leaveAccess(uid));
-  ipcMain.handle('p2p:request', (_, hostUid, serverId, reconnect) => onlineManager.p2pRequest(hostUid, serverId, reconnect));
-  ipcMain.handle('p2p:signalSend', (_, role, uid, data) => onlineManager.p2pSignalSend(role, uid, data));
-  ipcMain.handle('p2p:signalPoll', (_, role, uid) => onlineManager.p2pSignalPoll(role, uid));
-  ipcMain.handle('p2p:end', (_, role, uid) => onlineManager.p2pEnd(role, uid));
-  ipcMain.handle('p2p:exec', (_, friendUid, method, args) => onlineManager.p2pExec(friendUid, method, args));
-  ipcMain.handle('cohost:respondEditor', (_, reqId, allowed) => onlineManager.respondEditorSession(reqId, allowed));
+  // ---- Code access (one-time code -> P2P Remote Server Editor) ----
+  ipcMain.handle('access:status', () => codeAccess.getStatus());
+  ipcMain.handle('access:create', (_, serverId) => codeAccess.createCode(serverId));
+  ipcMain.handle('access:cancel', () => codeAccess.cancelCode());
+  ipcMain.handle('access:disconnect', () => codeAccess.disconnect());
+  ipcMain.handle('access:check', (_, code) => codeAccess.check(code));
+  ipcMain.handle('p2p:signalSend', (_, role, code, sid, data) => codeAccess.signalSend(role, code, sid, data));
+  ipcMain.handle('p2p:signalPoll', (_, role, code, sid) => codeAccess.signalPoll(role, code, sid));
+  ipcMain.handle('p2p:end', (_, role, code, sid) => codeAccess.end(role, code, sid));
+  ipcMain.handle('p2p:claim', (_, code, sid) => codeAccess.claim(code, sid));
+  ipcMain.handle('p2p:hostOpened', (_, code) => codeAccess.hostOpened(code));
+  ipcMain.handle('p2p:hostClosed', (_, code) => codeAccess.hostClosed(code));
+  ipcMain.handle('p2p:exec', (_, code, method, args) => codeAccess.p2pExec(code, method, args));
 
-  onlineManager.autoStart();
+  codeAccess.autoStart();
 
   serverManager.on('status', d => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('event:server-status', d);
@@ -511,7 +495,7 @@ app.whenReady().then(() => {
   });
 
   app.on('window-all-closed', async () => {
-    try { await onlineManager.shutdown(); } catch (_) {}
+    try { await codeAccess.shutdown(); } catch (_) {}
     await serverManager.stopAll();
     playitManager.stopAll();
     if (process.platform !== 'darwin') app.quit();

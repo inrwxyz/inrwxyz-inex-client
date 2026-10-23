@@ -1,9 +1,9 @@
 /**
- * INEX CLIENT — Friend Server Access (per server) + Remote Server Editor over WebRTC P2P
- * - Zero online/offline presence checks (saves Firebase bandwidth)
- * - Host gets a 10-second Allow / Deny popup when a friend clicks "Open editor"
- * - If Host clicks Deny -> 1 hour cooldown for that friend
- * - If Host does not respond within 10s -> 10 minute cooldown for that friend
+ * INEX CLIENT — Server Access by one-time code + Remote Server Editor over WebRTC P2P
+ * - Host: "Give access" -> pick a server -> Generate code (8 chars, one-time, 15 min)
+ * - Joiner: "Friend servers" -> paste code -> editor opens (no Allow/Deny prompt)
+ * - While someone is connected nobody else can use a code and the host cannot generate a new one
+ * - Host can press Disconnect at any time; the joiner closing the editor ends the access
  */
 (function () {
   'use strict';
@@ -17,30 +17,6 @@
   function el(t, c, h) { const e = document.createElement(t); if (c) e.className = c; if (h) e.innerHTML = h; return e; }
 
   const P2P = window.inexP2P;
-  const srvNames = list => (list || []).map(x => x.name).join(', ');
-  const COOLDOWN_STORAGE_KEY = 'inex_editor_cooldowns_v1';
-
-  function loadCooldowns() {
-    try { return JSON.parse(localStorage.getItem(COOLDOWN_STORAGE_KEY) || '{}') || {}; } catch (_) { return {}; }
-  }
-  function saveCooldown(hostUid, until, reason) {
-    const map = loadCooldowns();
-    map[hostUid] = { until: Number(until) || 0, reason: reason || 'timeout' };
-    try { localStorage.setItem(COOLDOWN_STORAGE_KEY, JSON.stringify(map)); } catch (_) {}
-  }
-  function getCooldown(hostUid) {
-    const map = loadCooldowns();
-    const entry = map[hostUid];
-    if (!entry || !entry.until || Date.now() >= entry.until) return null;
-    return entry;
-  }
-  function fmtRemaining(ms) {
-    const totalSec = Math.max(1, Math.ceil(ms / 1000));
-    const m = Math.floor(totalSec / 60);
-    const s = totalSec % 60;
-    return m > 0 ? `${m}m ${String(s).padStart(2, '0')}s` : `${s}s`;
-  }
-
   const PROP_GROUPS = [
     {
       title: 'Gameplay',
@@ -139,53 +115,18 @@
   }
   const fail = e => toast('<b>' + esc(clean(e)) + '</b>', 4500);
 
-  // Listen for live Editor Access Requests on the Host's launcher (10-second timer!)
-  if (api.onEditorAccessRequest) {
-    api.onEditorAccessRequest(req => {
-      if (!req || !req.reqId) return;
-      let remSec = Math.ceil((Number(req.timeoutMs) || 10000) / 1000);
-      const t = toast(
-        `<b>🔔 ${esc(req.callerName || 'A friend')}</b> wants to open the editor of <b>${esc(req.serverName || 'your server')}</b> (<span class="req-cd">${remSec}s</span>).<div style="display:flex;gap:8px;margin-top:9px;"></div>`,
-        0
-      );
-      const cdSpan = $(t, '.req-cd');
-      const row = $(t, 'div');
-      const allowBtn = el('button', 'btn btn-sm btn-crimson', 'Allow'); allowBtn.type = 'button';
-      const denyBtn = el('button', 'btn btn-sm glass-btn', 'Deny (1h block)'); denyBtn.type = 'button';
-
-      const iv = setInterval(() => {
-        remSec -= 1;
-        if (remSec <= 0) {
-          clearInterval(iv);
-          t.remove();
-        } else if (cdSpan) {
-          cdSpan.textContent = `${remSec}s`;
-        }
-      }, 1000);
-
-      allowBtn.onclick = async () => {
-        clearInterval(iv);
-        t.remove();
-        try { await api.respondEditorAccess(req.reqId, true); toast(`Allowed <b>${esc(req.callerName)}</b> to edit <b>${esc(req.serverName || 'your server')}</b>.`); } catch (_) {}
-      };
-      denyBtn.onclick = async () => {
-        clearInterval(iv);
-        t.remove();
-        try { await api.respondEditorAccess(req.reqId, false); toast(`Denied <b>${esc(req.callerName)}</b> (blocked for 1 hour).`); } catch (_) {}
-      };
-      row.appendChild(allowBtn);
-      row.appendChild(denyBtn);
-    });
-  }
+  const normCode = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const fmtCode = c => (c && c.length === 8 ? c.slice(0, 4) + '-' + c.slice(4) : (c || ''));
+  const fmtLeft = ms => { const t = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
 
   const hdr = $(sec, '.section-header-row'), newBtn = document.getElementById('srvNewBtn');
-  const b1 = el('button', 'btn glass-btn', '👥 Friend servers<span class="cx-badge" style="display:none">0</span>'); b1.type = 'button';
+  const b1 = el('button', 'btn glass-btn', '👥 Friend servers'); b1.type = 'button';
   const b2 = el('button', 'btn glass-btn', '🔑 Give access'); b2.type = 'button';
   if (hdr && newBtn) { const w = el('div', 'cx-wrap'); hdr.insertBefore(w, newBtn); w.appendChild(b1); w.appendChild(b2); w.appendChild(newBtn); }
   else if (hdr) { hdr.appendChild(b1); hdr.appendChild(b2); }
 
   const hub = el('div'); hub.id = 'cxHubBar';
-  const h1 = el('button', 'btn glass-btn', '👥 Friend servers<span class="cx-badge" style="display:none">0</span>'); h1.type = 'button';
+  const h1 = el('button', 'btn glass-btn', '👥 Friend servers'); h1.type = 'button';
   const h2 = el('button', 'btn glass-btn', '🔑 Give access'); h2.type = 'button';
   hub.appendChild(h1); hub.appendChild(h2); sec.appendChild(hub);
 
@@ -209,17 +150,8 @@
     document.body.appendChild(ov); $(ov, '.cx-x').onclick = close;
     load();
   }
-  b1.onclick = h1.onclick = () => gate(() => open('mine'));
-  b2.onclick = h2.onclick = () => gate(() => open('give'));
-
-  async function gate(fn) {
-    try {
-      const s = await api.onlineStatus();
-      if (!s.configured) return toast('<b>Online is not configured (firebaseConfig.js).</b>');
-      if (!s.unlocked) return toast('<b>Set an online password first.</b> Accounts tab → 🌐 Online button.', 5000);
-      fn();
-    } catch (e) { fail(e); }
-  }
+  b1.onclick = h1.onclick = () => open('mine');
+  b2.onclick = h2.onclick = () => open('give');
 
   async function load() {
     if (rmTimer) { clearInterval(rmTimer); rmTimer = null; }
@@ -232,81 +164,39 @@
     const body = ov && $(ov, '#cxBody'); if (!body) return;
     try {
       if (view === 'mine') {
-        const [inv, fr] = await Promise.all([api.cohostInvites(), api.friendsList()]);
-        if (!ov) return; renderMine(body, inv, fr); setBadge(inv.length);
+        renderMine(body);
       } else {
-        const [fr, gr, mine] = await Promise.all([api.friendsList(), api.cohostList(), api.listServers()]);
-        if (!ov) return; renderGive(body, fr, gr, mine || []);
+        const [st, mine] = await Promise.all([api.accessStatus(), api.listServers()]);
+        if (!ov) return; renderGive(body, st, mine || []);
       }
     } catch (e) { body.innerHTML = '<div class="cx-empty">' + esc(clean(e)) + '</div>'; }
   }
 
-  function startMineCooldownTicker(body) {
-    if (cdInterval) clearInterval(cdInterval);
-    const tick = () => {
-      const btns = body.querySelectorAll('button[data-host-uid]');
-      let any = false;
-      btns.forEach(btn => {
-        const hostUid = btn.getAttribute('data-host-uid');
-        const cd = getCooldown(hostUid);
-        if (cd) {
-          any = true;
-          btn.disabled = true;
-          btn.textContent = `Wait ${fmtRemaining(cd.until - Date.now())}`;
-        } else if (btn.disabled) {
-          btn.disabled = false;
-          btn.textContent = 'Open editor';
-        }
-      });
-      if (!any && cdInterval) {
-        clearInterval(cdInterval);
-        cdInterval = null;
-      }
-    };
-    tick();
-    cdInterval = setInterval(tick, 1000);
-  }
-
-  function renderMine(body, inv, fr) {
+  /* ---------------- JOINER: paste a code ---------------- */
+  function renderMine(body) {
     body.innerHTML = '';
-    body.appendChild(el('div', 'cx-sec', 'INVITES (' + inv.length + ')'));
-    if (!inv.length) body.appendChild(el('div', 'cx-empty', 'No pending invites.'));
-    inv.forEach(i => {
-      const r = el('div', 'cx-row', `<div class="i"><b>${esc(i.name)}</b><span>shares <b style="display:inline">${esc(srvNames(i.servers))}</b> with you</span></div>`);
-      const a = el('button', 'btn btn-sm btn-crimson', 'Accept'); a.type = 'button';
-      a.onclick = async () => { try { await api.cohostAccept(i.uid); toast('Access from ' + esc(i.name) + ' accepted'); load(); } catch (e) { fail(e); } };
-      const d = el('button', 'btn btn-sm glass-btn', 'Deny'); d.type = 'button';
-      d.onclick = async () => { try { await api.cohostDecline(i.uid); load(); } catch (e) { fail(e); } };
-      r.appendChild(a); r.appendChild(d); body.appendChild(r);
-    });
-    const list = fr.filter(f => f.access && f.access.servers && f.access.servers.length);
-    const total = list.reduce((n, f) => n + f.access.servers.length, 0);
-    body.appendChild(el('div', 'cx-sec', 'SERVERS I CAN MANAGE (' + total + ')'));
-    if (!list.length) body.appendChild(el('div', 'cx-empty', 'No friend has given you server access yet.'));
-    list.forEach(f => {
-      f.access.servers.forEach(sv => {
-        const r = el('div', 'cx-row', `<div class="i"><b>${esc(sv.name)}</b><span>${esc(f.name)}'s server</span></div>`);
-        const cd = getCooldown(f.uid);
-        const o = el('button', 'btn btn-sm btn-crimson', cd ? `Wait ${fmtRemaining(cd.until - Date.now())}` : 'Open editor');
-        o.type = 'button';
-        o.setAttribute('data-host-uid', f.uid);
-        o.disabled = Boolean(cd);
-        o.onclick = () => {
-          const activeCd = getCooldown(f.uid);
-          if (activeCd) return;
-          openRemoteEditor(f, sv);
-        };
-        r.appendChild(o); body.appendChild(r);
-      });
-      const lv = el('button', 'btn btn-sm glass-btn', 'Leave ' + esc(f.name) + "'s servers"); lv.type = 'button';
-      lv.onclick = async () => { if (!confirm('Give up your access to ' + f.name + "'s servers?")) return; try { await api.cohostLeave(f.uid); load(); } catch (e) { fail(e); } };
-      const w = el('div', 'cx-row', ''); w.style.background = 'transparent'; w.style.border = '0'; w.style.padding = '0 2px 6px'; w.appendChild(lv); body.appendChild(w);
-    });
-    body.appendChild(el('div', 'cx-hint', 'Clicking Open editor sends a 10s prompt to the server owner. If denied, a 1-hour cooldown applies; if unanswered, a 10-minute cooldown applies.'));
-    startMineCooldownTicker(body);
+    body.appendChild(el('div', 'cx-sec', 'JOIN WITH A CODE'));
+    const row = el('div', 'cx-row', '');
+    const inp = el('input', 'inex-input glass-input', ''); inp.type = 'text'; inp.placeholder = 'Paste code, e.g. K7M2-9QXP';
+    inp.maxLength = 12; inp.autocomplete = 'off'; inp.spellcheck = false;
+    inp.style.cssText = 'flex:1;min-width:180px;text-transform:uppercase;letter-spacing:.14em;font-weight:700;';
+    const go = el('button', 'btn btn-sm btn-crimson', 'Connect'); go.type = 'button';
+    row.appendChild(inp); row.appendChild(go); body.appendChild(row);
+    body.appendChild(el('div', 'cx-hint', 'Ask the server owner for a code (Server tab → 🔑 Give access). The code works once. When you close the editor your access ends.'));
+    let busy = false;
+    const run = () => {
+      if (busy) return;
+      const code = normCode(inp.value);
+      if (code.length !== 8) return toast('<b>The code has 8 letters/numbers.</b>');
+      busy = true; go.disabled = true; go.textContent = 'Connecting…'; inp.disabled = true;
+      openRemoteEditor({ uid: code, name: 'Host' }, { id: '', name: 'Remote server' });
+    };
+    go.onclick = run;
+    inp.onkeydown = e => { if (e.key === 'Enter') run(); };
+    setTimeout(() => { try { inp.focus(); } catch (_) {} }, 50);
   }
 
-  /* ==================== COMPACT FULL REMOTE SERVER EDITOR ==================== */
+  /* ---------------- REMOTE EDITOR (runs on the joiner's PC, executes on the host over P2P) ---------------- */
   async function openRemoteEditor(friend, server) {
     if (cdInterval) { clearInterval(cdInterval); cdInterval = null; }
     const box = ov && $(ov, '.cx-box');
@@ -314,7 +204,7 @@
     const titleEl = ov && $(ov, '#cxModalTitle');
     if (!box || !body) return;
     box.classList.add('wide');
-    if (titleEl) titleEl.textContent = `${String(server.name).toUpperCase()} · ${friend.name.toUpperCase()}'S SERVER`;
+    if (titleEl) titleEl.textContent = 'REMOTE SERVER EDITOR';
 
     const canMod = true;
     const rcall = (method, args) => P2P.call(friend.uid, method, args);
@@ -327,44 +217,31 @@
     let addonsQuery = '';
     let addonsInstalled = [];
 
-    let waitSec = 10;
-    body.innerHTML = `<div class="cx-empty">Waiting for <b>${esc(friend.name)}</b> to approve your request (<span id="rmWaitCd">10s</span>)…</div>`;
-    const waitIv = setInterval(() => {
-      waitSec = Math.max(0, waitSec - 1);
-      const sp = $(body, '#rmWaitCd');
-      if (sp) sp.textContent = `${waitSec}s`;
-    }, 1000);
+    body.innerHTML = '<div class="cx-empty">Connecting to the host…</div>';
 
     try {
       if (!P2P) throw new Error('P2P module did not load (p2p-link.js).');
       editorHost = friend.uid;
       stateOff = P2P.onState(ev => {
         if (ev.hostUid !== friend.uid) return;
+        const was = linkState;
         linkState = ev.state;
         const lb = $(body, '#rmLinkBadge');
         if (lb) paintLinkBadge(lb);
+        if (ev.state === 'closed' && was === 'open' && srvInfo) toast('<b>Connection closed.</b> Ask the host for a new code to reconnect.', 5000);
       });
-      await P2P.connect(friend.uid, server.id);
-      clearInterval(waitIv);
+      await P2P.connect(friend.uid);
       allServers = (await rcall('listServers', [])) || [];
       srvInfo = allServers.find(s => s.id === srvId) || allServers[0];
       if (!srvInfo) throw new Error('The host no longer has this server.');
       srvId = srvInfo.id;
+      linkState = 'open';
+      if (titleEl) titleEl.textContent = `${String(srvInfo.name).toUpperCase()} · REMOTE EDITOR`;
     } catch (e) {
-      clearInterval(waitIv);
       endEditorLink();
-      const rawMsg = clean(e);
-      const m = /^COOLDOWN_(DENIED|TIMEOUT):(\d+):(.*)$/.exec(rawMsg);
-      if (m) {
-        const reason = m[1] === 'DENIED' ? 'denied' : 'timeout';
-        const until = Number(m[2]) || (Date.now() + (reason === 'denied' ? 3600000 : 600000));
-        saveCooldown(friend.uid, until, reason);
-        toast('<b>' + esc(m[3]) + '</b>', 5000);
-        load();
-        return;
-      }
-      body.innerHTML = `<div class="cx-empty">${esc(rawMsg)}</div><button type="button" class="btn btn-sm glass-btn" id="rmBackBtn">← Back</button>`;
+      body.innerHTML = `<div class="cx-empty">${esc(clean(e))}</div><div style="display:flex;gap:8px;"><button type="button" class="btn btn-sm glass-btn" id="rmBackBtn">← Back</button><button type="button" class="btn btn-sm btn-crimson" id="rmRetryBtn">Retry</button></div>`;
       $(body, '#rmBackBtn').onclick = load;
+      $(body, '#rmRetryBtn').onclick = () => openRemoteEditor(friend, server);
       return;
     }
 
@@ -957,54 +834,76 @@
     paintShell();
   }
 
-  function renderGive(body, fr, gr, myServers) {
+  /* ---------------- HOST: generate a code / disconnect ---------------- */
+  function renderGive(body, st, myServers) {
     body.innerHTML = '';
-    const G = {}; gr.forEach(g => { G[g.uid] = g; });
-    body.appendChild(el('div', 'cx-sec', 'WHO HAS ACCESS TO MY SERVERS (' + gr.length + ')'));
-    if (!gr.length) body.appendChild(el('div', 'cx-empty', 'Nobody yet.'));
-    gr.forEach(g => {
-      const r = el('div', 'cx-row', `<div class="i"><b>${esc(g.name)}${g.accepted ? '' : ' · <span style="color:var(--warning,#f59e0b)">invite pending</span>'}</b><span>${esc(srvNames(g.servers) || '—')}</span></div>`);
-      const x = el('button', 'btn btn-sm glass-btn', 'Remove'); x.type = 'button';
-      x.onclick = async () => { try { await api.cohostRevoke(g.uid); toast('Access removed for ' + esc(g.name)); load(); } catch (e) { fail(e); } };
-      r.appendChild(x); body.appendChild(r);
-    });
-    body.appendChild(el('div', 'cx-sec', 'CHOOSE SERVERS + FRIEND'));
-    if (!myServers.length) { body.appendChild(el('div', 'cx-empty', 'Create a server first. Then you can share it with friends.')); return; }
-    if (!fr.length) { body.appendChild(el('div', 'cx-empty', 'No friends yet. Add friends in the Accounts tab (👥 Friends button) first.')); return; }
-    fr.forEach(f => {
-      const have = new Set(((G[f.uid] && G[f.uid].servers) || []).map(x => x.id));
-      const r = el('div', 'cx-row', `<div class="i"><b>${esc(f.name)}</b><span>Select server(s) below</span></div>`);
-      const boxes = el('div', '', '');
-      boxes.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;flex-basis:100%;';
-      myServers.forEach(sv => {
-        const lab = el('label', '', `<input type="checkbox" data-sid="${esc(sv.id)}" ${have.has(sv.id) ? 'checked' : ''}/> ${esc(sv.name)}`);
-        lab.style.cssText = 'display:inline-flex;align-items:center;gap:5px;font-size:11.5px;padding:3px 8px;border-radius:8px;background:rgba(255,255,255,.06);cursor:pointer;';
-        boxes.appendChild(lab);
-      });
-      const b = el('button', 'btn btn-sm btn-crimson', G[f.uid] ? 'Update access' : 'Send invite'); b.type = 'button';
-      b.onclick = async () => {
-        const ids = Array.from(boxes.querySelectorAll('input:checked')).map(i => i.getAttribute('data-sid'));
-        if (!ids.length) return toast('<b>Tick at least one server to share.</b>');
-        try {
-          const res = await api.cohostInvite(f.uid, ids);
-          toast(res && res.accepted ? 'Access updated for ' + esc(f.name) : 'Invite sent to ' + esc(f.name));
-          load();
-        } catch (e) { fail(e); }
+    if (!st.configured) {
+      body.appendChild(el('div', 'cx-empty', 'The handshake server is not configured (firebaseConfig.js).'));
+      return;
+    }
+    const srvName = id => { const s = myServers.find(x => x.id === id); return s ? s.name : 'your server'; };
+
+    if (st.phase === 'connected') {
+      body.appendChild(el('div', 'cx-sec', 'SOMEONE IS CONNECTED'));
+      const r = el('div', 'cx-row', `<div class="i"><b>● Editing ${esc(srvName(st.serverId))}</b><span>Connected via a code. New codes are locked until they leave.</span></div>`);
+      const d = el('button', 'btn btn-sm btn-danger', 'Disconnect'); d.type = 'button';
+      d.onclick = async () => { d.disabled = true; try { await api.accessDisconnect(); toast('Disconnected.'); } catch (e) { fail(e); } load(); };
+      r.appendChild(d); body.appendChild(r);
+      body.appendChild(el('div', 'cx-hint', 'When they close the editor their access ends by itself. You can also press Disconnect any time.'));
+      return;
+    }
+
+    if (st.phase === 'waiting' && st.code) {
+      body.appendChild(el('div', 'cx-sec', 'YOUR CODE FOR ' + String(srvName(st.serverId)).toUpperCase()));
+      const big = el('div', 'cx-row', '');
+      big.style.cssText = 'justify-content:space-between;padding:14px 16px;';
+      const codeEl = el('div', '', esc(fmtCode(st.code)));
+      codeEl.style.cssText = 'font:800 28px/1 Consolas,monospace;letter-spacing:.18em;color:#fff;user-select:all;';
+      const cp = el('button', 'btn btn-sm btn-crimson', 'Copy'); cp.type = 'button';
+      cp.onclick = async () => {
+        try { await navigator.clipboard.writeText(fmtCode(st.code)); cp.textContent = 'Copied'; setTimeout(() => { cp.textContent = 'Copy'; }, 1500); }
+        catch (_) { toast('<b>Select the code and press Ctrl+C.</b>'); }
       };
-      r.appendChild(b); r.appendChild(boxes); body.appendChild(r);
+      big.appendChild(codeEl); big.appendChild(cp); body.appendChild(big);
+      const left = el('div', 'cx-hint', ''); body.appendChild(left);
+      const tick = () => { left.textContent = 'Waiting for someone to use it… expires in ' + fmtLeft((st.exp || 0) - Date.now()) + '. One-time: it stops working after the first person joins.'; };
+      tick();
+      cdInterval = setInterval(() => { tick(); if ((st.exp || 0) < Date.now() - 1500) load(); }, 1000);
+      const cx = el('button', 'btn btn-sm glass-btn', 'Cancel code'); cx.type = 'button';
+      cx.onclick = async () => { cx.disabled = true; try { await api.accessCancel(); } catch (e) { fail(e); } load(); };
+      const w = el('div', 'cx-row', ''); w.style.cssText = 'background:transparent;border:0;padding:6px 2px;'; w.appendChild(cx); body.appendChild(w);
+      body.appendChild(el('div', 'cx-hint', 'Whoever has this code gets full editor access to this server (console + files) until you press Disconnect. Share it only with people you trust.'));
+      return;
+    }
+
+    body.appendChild(el('div', 'cx-sec', 'CHOOSE A SERVER, THEN GENERATE A CODE'));
+    if (!myServers.length) { body.appendChild(el('div', 'cx-empty', 'Create a server first. Then you can share it with a code.')); return; }
+    const btns = [];
+    let creating = false;
+    myServers.forEach(sv => {
+      const r = el('div', 'cx-row', `<div class="i"><b>${esc(sv.name)}</b><span>${esc(sv.loader || '')} ${esc(sv.version || '')} · ${esc(sv.status || '')}</span></div>`);
+      const g = el('button', 'btn btn-sm btn-crimson', 'Generate code'); g.type = 'button';
+      btns.push(g);
+      g.onclick = async () => {
+        if (creating) return;                       // never start a second code
+        creating = true;
+        btns.forEach(b => { b.disabled = true; });
+        g.textContent = 'Generating…';
+        try { await api.accessCreate(sv.id); }
+        catch (e) {
+          creating = false;
+          btns.forEach(b => { b.disabled = false; });
+          g.textContent = 'Retry';                  // Retry appears ONLY after a failure
+          fail(e);
+          return;
+        }
+        creating = false;
+        load();
+      };
+      r.appendChild(g); body.appendChild(r);
     });
-    body.appendChild(el('div', 'cx-hint', 'Friends can do everything on the servers you tick except delete them. Whenever a friend clicks Open editor, you get a 10s Allow / Deny notification.'));
+    body.appendChild(el('div', 'cx-hint', 'The code is 8 letters/numbers, works once and expires in 15 minutes. While someone is connected you cannot generate another one.'));
   }
 
-  function setBadge(n) { document.querySelectorAll('.cx-badge').forEach(b => { b.textContent = n; b.style.display = n ? 'inline-block' : 'none'; }); }
-  async function checkInvitesOnce() {
-    if (document.hidden) return;
-    try {
-      const s = await api.onlineStatus(); if (!s.unlocked) { setBadge(0); return; }
-      const inv = await api.cohostInvites(); setBadge(inv.length);
-    } catch (_) {}
-  }
-  document.querySelectorAll('.nav-btn[data-nav="server"]').forEach(b => b.addEventListener('click', () => setTimeout(checkInvitesOnce, 150)));
-  document.addEventListener('inex-online-changed', () => setTimeout(checkInvitesOnce, 300));
-  checkInvitesOnce();
+  if (api.onAccessState) api.onAccessState(() => { if (ov && view === 'give') load(); });
 })();
