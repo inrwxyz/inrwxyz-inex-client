@@ -23,6 +23,9 @@ function agentAsset() {
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// inex-playit-fix2: GitHub API for the real agent asset name + fetch with a timeout (no endless CONNECTING...)
+const AGENT_LATEST_API = 'https://api.github.com/repos/playit-cloud/playit-agent/releases/latest';
+const fetchT = (url, opts = {}, ms = 20000) => fetch(url, { ...opts, signal: AbortSignal.timeout(ms) });
 
 class PlayitManager extends EventEmitter {
   constructor({ settingsManager }) {
@@ -40,6 +43,8 @@ class PlayitManager extends EventEmitter {
       }
     });
     this.linkToken = 0;
+    this.linking = false; // true while an account link is running: auto tunnels must stay out of the way
+    this.autoSharing = new Set(); // serverIds currently connecting through the zero-login auto tunnel
     this.state = { status: 'off', message: '', claimUrl: '', tunnels: {} };
   }
 
@@ -57,6 +62,10 @@ class PlayitManager extends EventEmitter {
 
   get keyFile() {
     return path.join(this.baseDir, 'account.json');
+  }
+
+  get oldKeyFile() { // inex-playit-fix2: key kept after "Unlink" so a re-link can reuse the same agent
+    return path.join(this.baseDir, 'account.unlinked.json');
   }
 
   get sshKeyPath() {
@@ -122,6 +131,10 @@ class PlayitManager extends EventEmitter {
   }
 
   unlink() {
+    try { // inex-playit-fix2: remember the key so linking again does not create one more agent
+      const k = this._readKey();
+      if (k) fs.writeFileSync(this.oldKeyFile, JSON.stringify({ secretKey: k }), 'utf8');
+    } catch (_) {}
     this.stopAll();
     try { fs.unlinkSync(this.keyFile); } catch (_) {}
     try { fs.unlinkSync(this.globalKeyFile); } catch (_) {}
@@ -131,7 +144,7 @@ class PlayitManager extends EventEmitter {
 
   cancelLink() {
     this.linkToken++; // aborts a running link() poll loop
-    this._set({ status: 'off', message: '', claimUrl: '' });
+    this._set({ status: 'off', message: '', claimUrl: '' }, true);
     return { cancelled: true };
   }
 
@@ -139,7 +152,12 @@ class PlayitManager extends EventEmitter {
     return { ...this.state, linked: this.isLinked(), sharing: Array.from(this.users) };
   }
 
-  _set(patch) {
+  _set(patch, force) {
+    if (this.linking && !force && patch) {
+      // While an account link is running only the link flow may change the visible status.
+      const { status, message, claimUrl, ...rest } = patch;
+      patch = rest;
+    }
     this.state = { ...this.state, ...patch };
     this.emit('state', this.getState());
   }
@@ -283,6 +301,7 @@ class PlayitManager extends EventEmitter {
     // Try Pinggy first (Port 443 TCP, works through all firewalls with SSH key)
     let res = await this._trySingleSshProvider(serverId, { port, bedrockPort, provider: 'pinggy' });
     if (res && res.java) return res;
+    if (this.linking) return res;
     // Fallback to Serveo TCP tunnel
     res = await this._trySingleSshProvider(serverId, { port, bedrockPort, provider: 'serveo' });
     return res;
@@ -292,26 +311,62 @@ class PlayitManager extends EventEmitter {
   async _call(route, body, secretKey) {
     const headers = { 'Content-Type': 'application/json', 'User-Agent': UA };
     if (secretKey) headers.Authorization = `Agent-Key ${secretKey}`;
-    const res = await fetch(`${API}${route}`, { method: 'POST', headers, body: JSON.stringify(body || {}) });
+    const res = await fetchT(`${API}${route}`, { method: 'POST', headers, body: JSON.stringify(body || {}) }, 15000);
     const json = await res.json();
     if (json && json.status === 'success') return json.data;
-    throw new Error('Playit API error');
+    let detail = '';
+    try {
+      const d = json && json.data;
+      detail = d ? (typeof d === 'string' ? d : (d.message || d.type || JSON.stringify(d))) : '';
+    } catch (_) {}
+    throw new Error('Playit API error' + (detail ? ': ' + String(detail).slice(0, 120) : ''));
+  }
+
+  async _agentDownloadUrls() {
+    const asset = agentAsset();
+    const urls = [];
+    try {
+      const r = await fetchT(AGENT_LATEST_API, { headers: { 'User-Agent': UA, Accept: 'application/vnd.github+json' } }, 15000);
+      if (r.ok) {
+        const j = await r.json();
+        const plat = process.platform === 'win32' ? /windows/i : process.platform === 'darwin' ? /darwin|macos/i : /linux/i;
+        const wantArm = /arm|aarch/i.test(asset.file);
+        const score = n => (/x86_64|amd64|x64/i.test(n) ? 3 : 0) + (/signed/i.test(n) ? 2 : 0);
+        (j.assets || [])
+          .filter(a => a && a.browser_download_url && plat.test(String(a.name)))
+          .filter(a => !/\.(msi|zip|tar|gz|deb|rpm|sha256|sig|txt|json)$/i.test(String(a.name)))
+          .filter(a => (process.platform !== 'win32' || /\.exe$/i.test(String(a.name))) && /arm|aarch/i.test(String(a.name)) === wantArm)
+          .sort((a, b) => score(String(b.name)) - score(String(a.name)))
+          .forEach(a => urls.push(a.browser_download_url));
+      }
+    } catch (_) {}
+    urls.push(`${RELEASE_BASE}/${asset.file}`);
+    if (process.platform === 'win32') urls.push(`${RELEASE_BASE}/playit-windows-x86-signed.exe`);
+    return Array.from(new Set(urls));
   }
 
   async _ensureAgent() {
     if (fs.existsSync(this.agentPath) && fs.statSync(this.agentPath).size > 1_000_000) return;
     fs.mkdirSync(this.baseDir, { recursive: true });
-    const asset = agentAsset();
-    const url = `${RELEASE_BASE}/${asset.file}`;
-    const res = await fetch(url, { headers: { 'User-Agent': UA }, redirect: 'follow' });
-    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-    const tmp = `${this.agentPath}.part`;
-    const out = fs.createWriteStream(tmp);
-    for await (const chunk of res.body) {
-      if (!out.write(chunk)) await new Promise(r => out.once('drain', r));
+    const errors = [];
+    for (const url of await this._agentDownloadUrls()) {
+      try {
+        const res = await fetchT(url, { headers: { 'User-Agent': UA }, redirect: 'follow' }, 120000);
+        if (!res.ok) { errors.push(`HTTP ${res.status}`); continue; }
+        const buf = Buffer.from(await res.arrayBuffer());
+        if (buf.length < 1_000_000) { errors.push('file too small'); continue; }
+        if (process.platform === 'win32' && !(buf[0] === 0x4d && buf[1] === 0x5a)) { errors.push('not an exe'); continue; }
+        const tmp = `${this.agentPath}.part`;
+        fs.writeFileSync(tmp, buf);
+        fs.renameSync(tmp, this.agentPath);
+        if (process.platform !== 'win32') { try { fs.chmodSync(this.agentPath, 0o755); } catch (_) {} }
+        this._agentFresh = true;
+        return;
+      } catch (e) {
+        errors.push(e && e.message ? e.message : String(e));
+      }
     }
-    await new Promise((resolve, reject) => { out.end(err => (err ? reject(err) : resolve())); });
-    fs.renameSync(tmp, this.agentPath);
+    throw new Error('Playit agent download failed (' + errors.slice(0, 3).join(', ') + ')');
   }
 
   _addressOf(tunnel, kind) {
@@ -355,16 +410,108 @@ class PlayitManager extends EventEmitter {
     throw new Error('Playit tunnel timeout');
   }
 
-  async _startPlayitAgent(secretKey) {
-    if (this.proc) return;
-    const proc = spawn(this.agentPath, ['--secret', secretKey, '--stdout'], {
-      cwd: this.baseDir,
-      windowsHide: true,
-      stdio: ['ignore', 'ignore', 'ignore'],
-      env: { ...process.env, SECRET_KEY: secretKey }
+  // inex-playit-fix2: starts playit.exe and waits a few seconds to see that it really stays alive.
+  // Tries several argument styles (the agent CLI changed between versions), logs to .playit/agent.log (key masked).
+  _startPlayitAgent(secretKey) {
+    if (this.proc) return Promise.resolve();
+    if (!this._agentStarting) {
+      this._agentStarting = this._startPlayitAgentImpl(secretKey).finally(() => { this._agentStarting = null; });
+    }
+    return this._agentStarting;
+  }
+
+  async _startPlayitAgentImpl(secretKey) {
+    fs.mkdirSync(this.baseDir, { recursive: true });
+    const logFile = path.join(this.baseDir, 'agent.log');
+    try { fs.writeFileSync(logFile, ''); } catch (_) {}
+    const attempts = [['--secret', secretKey, '--stdout'], ['--secret', secretKey], []];
+    let tail = '';
+    for (let round = 0; round < 2; round++) {
+      for (const args of attempts) {
+        const r = await this._spawnAgentOnce(secretKey, args, logFile);
+        if (r.alive) return;
+        tail = r.tail || tail;
+      }
+      if (round === 0) {
+        if (this._agentFresh) break; // just downloaded, a fresh download would not change anything
+        try { fs.unlinkSync(this.agentPath); await this._ensureAgent(); } catch (_) { break; }
+      }
+    }
+    throw new Error('Playit agent could not start' + (tail ? ': ' + tail.replace(/\s+/g, ' ').slice(0, 140) : ''));
+  }
+
+  _spawnAgentOnce(secretKey, args, logFile) {
+    return new Promise(resolve => {
+      const mask = s => String(s).split(secretKey).join('***');
+      const shown = args.map(a => (a === secretKey ? '***' : a)).join(' ');
+      try { fs.appendFileSync(logFile, `\n--- ${new Date().toISOString()} playit ${shown}\n`); } catch (_) {}
+      let tail = '';
+      let written = 0;
+      let done = false;
+      let timer = null;
+      let proc;
+      const finish = r => { if (done) return; done = true; if (timer) clearTimeout(timer); resolve(r); };
+      try {
+        proc = spawn(this.agentPath, args, {
+          cwd: this.baseDir,
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: { ...process.env, SECRET_KEY: secretKey }
+        });
+      } catch (e) {
+        finish({ alive: false, tail: mask(e && e.message ? e.message : e) });
+        return;
+      }
+      const onData = d => {
+        const t = mask(d.toString('utf8'));
+        tail = (tail + t).slice(-600);
+        if (written < 1_000_000) { written += t.length; try { fs.appendFileSync(logFile, t); } catch (_) {} }
+      };
+      proc.stdout.on('data', onData);
+      proc.stderr.on('data', onData);
+      proc.on('error', e => finish({ alive: false, tail: tail || mask(e && e.message ? e.message : e) }));
+      proc.on('exit', code => {
+        if (this.proc === proc) this.proc = null;
+        finish({ alive: false, tail: tail.trim() || `exit code ${code}` });
+      });
+      timer = setTimeout(() => {
+        if (done) return;
+        this.proc = proc;
+        finish({ alive: true });
+      }, 4000);
     });
-    this.proc = proc;
-    proc.on('exit', () => { this.proc = null; });
+  }
+
+  // Re-use the key saved by a previous "Unlink" (if Playit still accepts it) instead of creating one more agent.
+  async _tryRestoreKey() {
+    let key = null;
+    try {
+      const j = JSON.parse(fs.readFileSync(this.oldKeyFile, 'utf8'));
+      key = j && j.secretKey ? String(j.secretKey).trim() : null;
+    } catch (_) {}
+    if (!key || key.length < 16) return false;
+    try {
+      const run = await this._call('/agents/rundata', {}, key);
+      if (!run || !run.agent_id) return false;
+      this._writeKey(key);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Right after linking: start the agent so playit.gg sees it online (this is what the browser page waits for).
+  async _afterLink() {
+    const key = this._readKey();
+    if (!key) return;
+    this._set({ status: 'linking', message: 'Starting Playit agent...', claimUrl: '' }, true);
+    try {
+      await this._ensureAgent();
+      await this._startPlayitAgent(key);
+      this._set({ status: 'off', message: '', claimUrl: '' }, true);
+    } catch (e) {
+      this._set({ status: 'error', message: 'Playit linked, but the agent could not start: ' + (e && e.message ? e.message : e), claimUrl: '' }, true);
+    }
   }
 
   _stopPlayitAgent() {
@@ -381,28 +528,64 @@ class PlayitManager extends EventEmitter {
   // The secret key is saved once; after that every start/stop reuses the same tunnel + address.
   async link(openUrl) {
     if (this._readKey()) return { ok: true, already: true };
+    if (this.linking) return { ok: false, error: 'Link already in progress' };
+    this.linking = true;
+    try {
+      this._pauseAutoTunnels();
+      if (await this._tryRestoreKey()) { // inex-playit-fix2
+        await this._afterLink();
+        return { ok: true, restored: true };
+      }
+      return await this._linkFlow(openUrl);
+    } finally {
+      this.linking = false;
+    }
+  }
+
+  // Stops the zero-login auto tunnels (and drops ones still connecting) so they cannot interfere with the account link.
+  _pauseAutoTunnels() {
+    const ids = new Set([...this.directProcs.keys(), ...this.autoSharing]);
+    if (!ids.size) return;
+    const tunnels = { ...this.state.tunnels };
+    for (const id of ids) {
+      this.gen.set(id, (this.gen.get(id) || 0) + 1);
+      this._stopDirectTunnel(id);
+      this.users.delete(id);
+      delete tunnels[id];
+    }
+    this._set({ tunnels });
+  }
+
+  async _linkFlow(openUrl) {
     const token = ++this.linkToken;
     const code = require('crypto').randomBytes(5).toString('hex');
-    const claimUrl = `https://playit.gg/claim/${code}`;
+    const claimUrl = 'https://playit.gg/claim/' + code;
     const asString = d => (typeof d === 'string' ? d : (d && (d.status || d.state || Object.keys(d)[0])) || '');
     try {
       await this._call('/claim/setup', { code, agent_type: 'self-managed', version: 'inex-launcher' });
     } catch (e) {
-      this._set({ status: 'error', message: 'Could not start Playit link. Check your internet and try again.', claimUrl: '' });
+      this._set({ status: 'error', message: 'Could not start Playit link. Check your internet and try again.', claimUrl: '' }, true);
       return { ok: false, error: e.message };
     }
-    this._set({ status: 'linking', message: 'Log in to Playit in the browser and approve.', claimUrl });
+    this._set({ status: 'linking', message: 'Log in to Playit in the browser and approve.', claimUrl }, true);
     try { if (typeof openUrl === 'function') openUrl(claimUrl); } catch (_) {}
 
     const deadline = Date.now() + 10 * 60 * 1000;
     while (Date.now() < deadline) {
-      if (token !== this.linkToken) return { ok: false, cancelled: true };
+      if (token !== this.linkToken) {
+        this._set({ status: 'off', message: '', claimUrl: '' }, true);
+        return { ok: false, cancelled: true };
+      }
       await sleep(3000);
       let st = '';
       try { st = asString(await this._call('/claim/setup', { code, agent_type: 'self-managed', version: 'inex-launcher' })); } catch (_) { continue; }
       if (/UserRejected/i.test(st)) {
-        this._set({ status: 'error', message: 'Playit link was rejected.', claimUrl: '' });
+        this._set({ status: 'error', message: 'Playit link was rejected.', claimUrl: '' }, true);
         return { ok: false, error: 'rejected' };
+      }
+      if (/limit/i.test(st)) {
+        this._set({ status: 'error', message: 'Your Playit account reached its agent limit. Open playit.gg > Manage Agent, delete old agents, then link again.', claimUrl: '' }, true);
+        return { ok: false, error: 'agent limit' };
       }
       if (/UserAccepted/i.test(st)) {
         try {
@@ -410,15 +593,15 @@ class PlayitManager extends EventEmitter {
           const key = ex && (ex.secret_key || ex.secretKey);
           if (!key) throw new Error('no key');
           this._writeKey(String(key).trim());
-          this._set({ status: 'off', message: '', claimUrl: '' });
+          await this._afterLink(); // inex-playit-fix2: start the agent now, otherwise playit.gg says "Agent is offline"
           return { ok: true };
         } catch (e) {
-          this._set({ status: 'error', message: 'Playit approved, but key exchange failed. Try again.', claimUrl: '' });
+          this._set({ status: 'error', message: 'Playit approved, but key exchange failed. Try again.', claimUrl: '' }, true);
           return { ok: false, error: e.message };
         }
       }
     }
-    this._set({ status: 'error', message: 'Playit link timed out. Try again.', claimUrl: '' });
+    this._set({ status: 'error', message: 'Playit link timed out. If the Playit page said "Agent limit reached", delete old agents at playit.gg > Manage Agent, then try again.', claimUrl: '' }, true);
     return { ok: false, error: 'timeout' };
   }
 
@@ -472,14 +655,22 @@ class PlayitManager extends EventEmitter {
 
   async _share(serverId, { port, bedrockPort, javaTunnel }) {
     if (javaTunnel === 'bore') return this._shareViaBore(serverId, { port, bedrockPort });
+    if (this.linking) return { ok: false, error: 'Playit link in progress' };
     this.bore.stop(serverId);
-    this._set({ status: 'starting', message: 'Auto-generating public server IP & tunnel...', claimUrl: '' });
+    const existingPlayitKey = this._readKey();
+    this._set({
+      status: 'starting',
+      message: existingPlayitKey ? 'Connecting to playit.gg...' : 'Auto-generating public server IP & tunnel...',
+      claimUrl: ''
+    });
 
     // 1. If a Playit.gg secretKey is already present on the PC, use Playit.gg directly (no popup)
-    const existingPlayitKey = this._readKey();
     if (existingPlayitKey) {
+      this._lastPlayitError = null;
       try {
         await this._ensureAgent();
+        // Start the agent first so playit.gg sees it online while the tunnels are being created.
+        await this._startPlayitAgent(existingPlayitKey);
         const run = await this._call('/agents/rundata', {}, existingPlayitKey);
         if (run && run.agent_id) {
           const result = {};
@@ -490,8 +681,10 @@ class PlayitManager extends EventEmitter {
               const fresh = await this._call('/agents/rundata', {}, existingPlayitKey);
               const bedrock = await this._ensurePlayitTunnel(existingPlayitKey, fresh, { kind: 'bedrock', localPort: bedrockPort });
               result.bedrock = this._addressOf(bedrock, 'bedrock');
-            } catch (_) {
-              result.bedrock = { host: result.java.host, port: bedrockPort, display: `${result.java.host}:${bedrockPort}` };
+            } catch (e) {
+              // inex-playit-fix3: never invent a Bedrock address from the Java tunnel (a TCP host does not carry Bedrock UDP).
+              // No Bedrock tunnel => no Bedrock address is shown. The reason goes to .playit/agent.log.
+              try { fs.appendFileSync(path.join(this.baseDir, 'agent.log'), `\n--- ${new Date().toISOString()} bedrock tunnel unavailable: ${e && e.message ? e.message : e}\n`); } catch (_) {}
             }
           }
           this.users.add(serverId);
@@ -502,11 +695,26 @@ class PlayitManager extends EventEmitter {
       } catch (e) {
         this._lastPlayitError = e && e.message;
       }
+
+      // Account is linked: show the real problem instead of silently handing out a random address.
+      const why = this._lastPlayitError ? ' (' + this._lastPlayitError + ')' : '';
+      this._set({
+        status: 'error',
+        message: 'Could not connect to Playit.gg' + why + '. If your Playit account says "Agent limit reached", delete old agents at playit.gg > Manage Agent. Then click Connect Playit.gg again.',
+        claimUrl: ''
+      });
+      return { ok: false, error: 'Playit connection failed' };
     }
 
     // 2. Zero-login temporary tunnel. Address changes on every restart (free relay limitation).
     //    Link a Playit account once to get a fixed address.
-    const direct = await this._startDirectAutoTunnel(serverId, { port, bedrockPort });
+    this.autoSharing.add(serverId);
+    let direct;
+    try {
+      direct = await this._startDirectAutoTunnel(serverId, { port, bedrockPort });
+    } finally {
+      this.autoSharing.delete(serverId);
+    }
     if (direct && direct.java) {
       direct.temporary = true;
       delete direct.bedrock; // SSH relays are TCP only: Bedrock (UDP) needs the permanent Playit tunnel

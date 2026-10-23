@@ -938,7 +938,7 @@
             <div class="identity-name">${esc(acc.username)}</div>
             <div class="identity-type">${acc.type === 'microsoft' ? 'MICROSOFT (ONLINE)' : 'LOCAL (OFFLINE)'}</div>
           </div>
-          <button type="button" class="identity-remove-btn" data-action="remove" title="Remove identity">&times;</button>
+          <button type="button" class="identity-remove-btn" data-action="remove" title="${acc.type === 'microsoft' ? 'Log out' : 'Remove identity'}">&times;</button>
         `;
 
         card.addEventListener('click', async e => {
@@ -959,7 +959,7 @@
               state.activeAccountId = updated.activeAccountId;
               state.skinSlots = updated.skinSlots || [];
               renderAccountsView();
-              showToast(deleteCloud ? 'Identity deleted forever' : 'Identity removed');
+              showToast(deleteCloud ? 'Identity deleted forever' : (acc.type === 'microsoft' ? 'Logged out' : 'Identity removed')); // [ms-login-fix]
             } catch (err) {
               showToast(err.message, 'error');
             }

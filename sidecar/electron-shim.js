@@ -110,7 +110,9 @@ const dialog = {
 };
 const shell = {
   openExternal: url => host('shell.openExternal', String(url)),
-  openPath: async p => { try { await host('shell.openPath', String(p)); return ''; } catch (e) { return e.message; } }
+  openPath: async p => { try { await host('shell.openPath', String(p)); return ''; } catch (e) { return e.message; } },
+  // [ms-login-fix] small Microsoft sign-in window (handled by the Tauri shell); resolves { canceled, url }
+  inexMicrosoftWebLogin: opts => host('webview.msLogin', opts)
 };
 // The frontend copies to the clipboard itself (navigator.clipboard) — see src/tauri-bridge.js.
 const clipboard = { writeText: () => {} };

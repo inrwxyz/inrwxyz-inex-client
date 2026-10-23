@@ -208,17 +208,11 @@ app.whenReady().then(() => {
   ipcMain.handle('accounts:remove', (_, id, deleteCloud) => (deleteCloud ? accountManager.deleteAccountForever(id) : accountManager.removeAccount(id)));
   ipcMain.handle('accounts:microsoftUrl', () => accountManager.getMicrosoftLoginUrl());
   ipcMain.handle('accounts:microsoftLogin', async () => {
+    // [ms-login-fix] small Microsoft sign-in window; the redirect is caught automatically (nothing to copy or paste)
     const authUrl = accountManager.getMicrosoftLoginUrl();
-    await shell.openExternal(authUrl);
-    const res = await dialog.showMessageBox(mainWindow, {
-      type: 'question',
-      title: 'Microsoft Sign-In',
-      message: 'Sign in with Microsoft in your browser, then copy the full redirect URL (or authorization code) from the address bar and paste it here.',
-      buttons: ['Paste URL / Code', 'Cancel'],
-      defaultId: 0
-    });
-    if (res.response === 1) throw new Error('Microsoft login cancelled.');
-    return accountManager.completeMicrosoftOAuthCode('mock_oauth_code');
+    const res = await shell.inexMicrosoftWebLogin({ url: authUrl, redirectPrefix: accountManager.getMicrosoftRedirectUri() });
+    if (!res || res.canceled || !res.url) throw new Error('Microsoft login cancelled.');
+    return accountManager.completeMicrosoftOAuthRedirect(res.url);
   });
 
   ipcMain.handle('skins:addSlot', (_, name) => accountManager.addSkinSlot(name));
@@ -442,6 +436,7 @@ app.whenReady().then(() => {
   ipcMain.handle('playit:link', () => playitManager.link(url => shell.openExternal(url)));
   ipcMain.handle('playit:cancelLink', () => playitManager.cancelLink());
   ipcMain.handle('playit:unlink', () => playitManager.unlink());
+  ipcMain.handle('playit:manage', () => shell.openExternal('https://playit.gg/account')); // inex-playit-fix3
 
   serverManager.on('log', d => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('event:server-log', d);

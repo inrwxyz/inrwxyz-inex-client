@@ -22,6 +22,7 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::oneshot;
+use tauri::{WebviewUrl, WebviewWindowBuilder}; // [ms-login-fix]
 
 type Reply = Result<Value, String>;
 
@@ -368,11 +369,87 @@ fn host_call(app: &AppHandle, sc: &Arc<Sidecar>, method: &str, args: &[Value]) -
             let first = d.blocking_show();
             Ok(json!({ "response": if first { 0 } else { 1 } }))
         }
+        "webview.msLogin" => ms_login_window(app, &a0), // [ms-login-fix]
         other => Err(format!("Unsupported host call: {other}")),
     }
 }
 
 // ---------------------------------------------------------------------------------------------
+
+// [ms-login-fix] Microsoft sign-in window. Opens `url` in a small separate window with a throw-away browser
+// profile, waits until the page tries to go to `redirectPrefix` (the sign-in result), stops that navigation and
+// returns the address. Returns { canceled: true } when the window is closed or after 10 minutes.
+fn ms_login_window(app: &AppHandle, args: &Value) -> Reply {
+    use std::sync::mpsc;
+
+    let url = args
+        .get("url")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "Missing sign-in address.".to_string())?
+        .to_string();
+    let prefix = args
+        .get("redirectPrefix")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "Missing redirect address.".to_string())?
+        .to_string();
+    if !url.starts_with("https://") || !prefix.starts_with("https://") {
+        return Err("Invalid sign-in address.".to_string());
+    }
+    let parsed = url.parse::<tauri::Url>().map_err(|e| e.to_string())?;
+
+    if let Some(w) = app.get_webview_window("mslogin") {
+        let _ = w.set_focus();
+        return Err("A Microsoft sign-in window is already open.".to_string());
+    }
+
+    // fresh browser profile for every sign-in, so no cookies of an earlier account are left behind
+    let data_dir = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("mslogin-webview");
+    let _ = std::fs::remove_dir_all(&data_dir);
+
+    let (tx, rx) = mpsc::channel::<Option<String>>();
+    let tx_nav = Mutex::new(tx.clone());
+    let tx_close = Mutex::new(tx);
+    let prefix_nav = prefix.clone();
+
+    let win = WebviewWindowBuilder::new(app, "mslogin", WebviewUrl::External(parsed))
+        .title("Microsoft sign-in")
+        .inner_size(520.0, 720.0)
+        .center()
+        .data_directory(data_dir.clone())
+        .on_navigation(move |u| {
+            if u.as_str().starts_with(prefix_nav.as_str()) {
+                if let Ok(t) = tx_nav.lock() {
+                    let _ = t.send(Some(u.to_string()));
+                }
+                false
+            } else {
+                true
+            }
+        })
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    win.on_window_event(move |e| {
+        if let WindowEvent::Destroyed = e {
+            if let Ok(t) = tx_close.lock() {
+                let _ = t.send(None);
+            }
+        }
+    });
+
+    let outcome = rx.recv_timeout(Duration::from_secs(600));
+    let _ = win.close();
+    let _ = std::fs::remove_dir_all(&data_dir); // best effort; it is cleared again before the next sign-in
+
+    match outcome {
+        Ok(Some(u)) => Ok(json!({ "canceled": false, "url": u })),
+        _ => Ok(json!({ "canceled": true })),
+    }
+}
 
 pub fn run() {
     let sidecar = Arc::new(Sidecar::new());

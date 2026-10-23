@@ -95,6 +95,7 @@ contextBridge.exposeInMainWorld('inexAPI', {
   playitLink: () => ipcRenderer.invoke('playit:link'),
   playitCancelLink: () => ipcRenderer.invoke('playit:cancelLink'),
   playitUnlink: () => ipcRenderer.invoke('playit:unlink'),
+  playitManage: () => ipcRenderer.invoke('playit:manage'), // inex-playit-fix3
   getPlayitState: () => ipcRenderer.invoke('playit:state'),
 
   // Code access (one-time code -> P2P Remote Server Editor)

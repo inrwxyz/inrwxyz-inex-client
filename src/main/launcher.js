@@ -380,6 +380,9 @@ class MinecraftLauncher {
       });
     }
 
+    // [ms-login-fix] renew the Microsoft/Minecraft token right before the game starts (no-op for local accounts)
+    await this.accountManager.ensureFreshActiveToken();
+
     const account = this.accountManager.getActiveAccount() || {
       username: 'Player',
       uuid: '00000000-0000-0000-0000-000000000000',

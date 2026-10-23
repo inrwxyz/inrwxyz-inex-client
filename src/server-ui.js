@@ -1433,8 +1433,9 @@
           ${!bed.supported
             ? `<div class="srv-net-hint">Bedrock Edition is not supported on Vanilla servers (Use Paper, Purpur, or Fabric).</div>`
             : bed.geyser
-              ? addrRow('Bedrock Edition IP', pubBed ? pubBed.host : (useBore && !pl.linked ? 'Needs Playit — switch provider above or link an account' : 'Waiting for Playit.gg Bedrock UDP tunnel...')) +
-                addrRow('Bedrock UDP Port', pubBed ? String(pubBed.port) : String(bed.port || 19132))
+              ? (pubBed
+                  ? addrRow('Bedrock Edition IP', pubBed.host) + addrRow('Bedrock UDP Port', String(pubBed.port))
+                  : (useBore && !pl.linked ? addrRow('Bedrock Edition IP', 'Needs Playit — switch provider above or link an account') : ''))
               : `<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid var(--border-subtle);">
                   <span style="font-size:12px; color:var(--text-secondary);">Want Bedrock (Mobile / Console / Windows) players to join?</span>
                   <button type="button" class="btn btn-sm btn-crimson" id="srvAddBedrock" ${S.installing ? 'disabled' : ''}>
@@ -1460,7 +1461,8 @@
               : ''
             }
             ${!useBore && pl.linked
-              ? `<button type="button" class="btn btn-sm srv-pdanger" id="srvUnlinkPlayitBtn" style="margin-left:auto;">Unlink Playit Account</button>`
+              ? `<button type="button" class="btn btn-sm glass-btn" id="srvManagePlayitBtn" style="margin-left:auto;">${ico('compass', 'ico-xs')}Manage Playit Account</button>
+                 <button type="button" class="btn btn-sm srv-pdanger" id="srvUnlinkPlayitBtn">Unlink Playit Account</button>`
               : ''
             }
           </div>
@@ -1553,6 +1555,13 @@
         await api.playitRelease(srv.id);
         await loadNetwork();
         toast('Tunnel stopped.', 'info');
+      });
+    }
+
+    const manageBtn = $('srvManagePlayitBtn'); // inex-playit-fix3
+    if (manageBtn) {
+      manageBtn.addEventListener('click', async () => {
+        try { await api.playitManage(); } catch (err) { toast(err, 'error'); }
       });
     }
 

@@ -7,6 +7,90 @@ const { createStoredZipBuffer } = require('./zipUtils');
 const MS_CLIENT_ID = '00000000402b5328';
 const MS_REDIRECT_URI = 'https://login.live.com/oauth20_desktop.srf';
 
+const { spawnSync } = require('child_process');
+
+// [ms-login-fix] ---- Microsoft sign-in settings (everything client-specific lives here) ----
+// To use your own Azure app later, change MS_CLIENT_ID above. Mojang must approve that app,
+// otherwise login_with_xbox answers HTTP 403 (invalid app registration).
+const MS_AUTHORIZE_URL = 'https://login.live.com/oauth20_authorize.srf';
+const MS_TOKEN_URL = 'https://login.live.com/oauth20_token.srf';
+const MS_SCOPE = 'service::user.auth.xboxlive.com::MBI_SSL';
+// login.live.com tokens go to Xbox Live as they are. A v2.0 token (login.microsoftonline.com/consumers) needs 'd=' here.
+const MS_RPS_PREFIX = '';
+const MS_REFRESH_MARGIN_MS = 5 * 60 * 1000; // refresh when 5 minutes or less are left
+const MS_HTTP_TIMEOUT_MS = 20000;
+const MS_RELOGIN_MESSAGE = 'Your Microsoft sign-in has expired. Log out of this account and log in with Microsoft again.';
+
+class MsAuthError extends Error {
+  constructor(message, { transient = false, needsRelogin = false, code = 'MS_AUTH' } = {}) {
+    super(message);
+    this.name = 'MsAuthError';
+    this.transient = transient;
+    this.needsRelogin = needsRelogin;
+    this.code = code;
+  }
+}
+
+async function msHttp(label, url, init) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), MS_HTTP_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } catch (_) {
+    throw new MsAuthError(`Could not reach ${label}. Check your internet connection and try again.`, { transient: true, code: 'NETWORK' });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function msReadJson(res) {
+  try { return await res.json(); } catch (_) { return null; }
+}
+
+function xstsErrorMessage(xerr, status) {
+  switch (Number(xerr)) {
+    case 2148916227: return 'This Xbox account is banned from Xbox services, so it cannot be used to sign in.';
+    case 2148916233: return 'This Microsoft account has no Xbox profile yet. Sign in once at minecraft.net (or xbox.com) to create it, then try again.';
+    case 2148916235: return 'Xbox Live is not available in the country or region of this Microsoft account.';
+    case 2148916236:
+    case 2148916237: return 'This Microsoft account needs adult verification on the Xbox website before it can sign in.';
+    case 2148916238: return 'This is a child account. An adult must add it to a Microsoft Family before it can sign in.';
+    default: return xerr ? `Xbox sign-in failed (XSTS error ${Number(xerr)}).` : `Xbox sign-in failed (HTTP ${status}).`;
+  }
+}
+
+// Windows DPAPI through PowerShell. The script travels as -EncodedCommand; the data (never a token on the command line) goes through stdin.
+function dpapiScript(method) {
+  return [
+    "$ErrorActionPreference = 'Stop'",
+    "$ProgressPreference = 'SilentlyContinue'",
+    'Add-Type -AssemblyName System.Security',
+    '$inB64 = [Console]::In.ReadToEnd().Trim()',
+    '$bytes = [Convert]::FromBase64String($inB64)',
+    `$out = [System.Security.Cryptography.ProtectedData]::${method}($bytes, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)`,
+    '[Console]::Out.Write([Convert]::ToBase64String($out))'
+  ].join('\n');
+}
+
+function powershellExe() {
+  const root = process.env.SystemRoot || process.env.windir;
+  if (root) {
+    const p = path.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    try { if (fs.existsSync(p)) return p; } catch (_) {}
+  }
+  return 'powershell.exe';
+}
+
+function runPowerShell(script, stdinText) {
+  const r = spawnSync(
+    powershellExe(),
+    ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+    { input: stdinText, encoding: 'utf8', windowsHide: true, timeout: 20000, maxBuffer: 16 * 1024 * 1024 }
+  );
+  if (r.error || r.status !== 0) throw new Error('Windows data protection (DPAPI) is not available.');
+  return String(r.stdout || '').trim();
+}
+
 function createPurePng(width, height, getPixel) {
   const rowSize = width * 4 + 1;
   const raw = Buffer.alloc(rowSize * height);
@@ -107,19 +191,104 @@ class AccountManager {
     return initial;
   }
 
-  _loadTokens() {
+  // [ms-login-fix] Tokens are stored encrypted with Windows DPAPI (CurrentUser): { "v": 2, "dpapi": "<base64>" }
+  _dpapiAvailable() {
+    return process.platform === 'win32';
+  }
+
+  _dpapiProtect(plainText) {
+    return runPowerShell(dpapiScript('Protect'), Buffer.from(String(plainText), 'utf8').toString('base64'));
+  }
+
+  _dpapiUnprotect(b64) {
+    return Buffer.from(runPowerShell(dpapiScript('Unprotect'), String(b64)), 'base64').toString('utf8');
+  }
+
+  // Quick check that DPAPI encrypts and decrypts correctly on this PC (no real tokens involved).
+  static dpapiSelfTest() {
+    const am = Object.create(AccountManager.prototype);
+    if (!am._dpapiAvailable()) return { ok: false, reason: 'Not Windows: DPAPI is only available on Windows.' };
+    const sample = `inex-selftest-${crypto.randomBytes(8).toString('hex')}`;
     try {
-      if (fs.existsSync(this.tokensFile)) {
-        return JSON.parse(fs.readFileSync(this.tokensFile, 'utf8'));
+      const enc = am._dpapiProtect(sample);
+      const dec = am._dpapiUnprotect(enc);
+      const opaque = !Buffer.from(enc, 'base64').toString('latin1').includes(sample);
+      return { ok: dec === sample && opaque, roundTrip: dec === sample, encryptedIsOpaque: opaque };
+    } catch (e) {
+      return { ok: false, reason: e.message };
+    }
+  }
+
+  _loadTokens() {
+    let parsed;
+    try {
+      if (!fs.existsSync(this.tokensFile)) return {};
+      parsed = JSON.parse(fs.readFileSync(this.tokensFile, 'utf8'));
+    } catch (_) {
+      return {}; // unreadable or damaged file: treat as logged out
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+
+    if (parsed.v !== undefined) {
+      if (parsed.v !== 2 || typeof parsed.dpapi !== 'string' || !this._dpapiAvailable()) return {};
+      try {
+        const obj = JSON.parse(this._dpapiUnprotect(parsed.dpapi));
+        if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return {};
+        this._lastPersistedTokens = JSON.stringify(obj);
+        return obj;
+      } catch (_) {
+        // other PC / other Windows user / damaged file: cannot be opened here, so the account is logged out
+        console.error('[auth] Saved Microsoft tokens could not be decrypted on this PC/user; please log in again.');
+        return {};
       }
-    } catch (_) {}
-    return {};
+    }
+
+    // old plain-text format (no "v"): encrypt it now, or drop the plain file when encryption is impossible
+    const legacy = {};
+    for (const [id, entry] of Object.entries(parsed)) {
+      if (entry && typeof entry === 'object' && !Array.isArray(entry)) legacy[id] = entry;
+    }
+    let saved = false;
+    try { saved = this._persistTokens(legacy); } catch (_) {}
+    if (!saved) {
+      try { fs.unlinkSync(this.tokensFile); } catch (_) {}
+      console.error('[auth] Old plain-text token file could not be encrypted; it was removed.');
+    }
+    return legacy;
+  }
+
+  _persistTokens(tokens) {
+    const obj = tokens && typeof tokens === 'object' ? tokens : {};
+    if (Object.keys(obj).length === 0) {
+      try { if (fs.existsSync(this.tokensFile)) fs.unlinkSync(this.tokensFile); } catch (_) {}
+      this._lastPersistedTokens = '{}';
+      return true;
+    }
+    const plain = JSON.stringify(obj);
+    if (plain === this._lastPersistedTokens && fs.existsSync(this.tokensFile)) return true; // nothing changed
+    if (!this._dpapiAvailable()) {
+      if (!this._warnedNoDpapi) {
+        this._warnedNoDpapi = true;
+        console.error('[auth] Windows DPAPI is not available here: Microsoft tokens are kept in memory only and are NOT saved to disk.');
+      }
+      return false;
+    }
+    const encrypted = this._dpapiProtect(plain);
+    fs.mkdirSync(path.dirname(this.tokensFile), { recursive: true });
+    const tmp = `${this.tokensFile}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify({ v: 2, dpapi: encrypted }), { mode: 0o600 });
+    fs.renameSync(tmp, this.tokensFile);
+    this._lastPersistedTokens = plain;
+    return true;
   }
 
   _saveTokens() {
     try {
-      fs.writeFileSync(this.tokensFile, JSON.stringify(this.tokens, null, 2), { mode: 0o600 });
-    } catch (_) {}
+      return this._persistTokens(this.tokens);
+    } catch (_) {
+      console.error('[auth] Could not save the encrypted Microsoft tokens; they stay in memory for this session.');
+      return false;
+    }
   }
 
   _save(state = this.state) {
@@ -289,84 +458,180 @@ class AccountManager {
     return this.listAccounts();
   }
 
-  async completeMicrosoftOAuthCode(authCode) {
-    if (!authCode) throw new Error('Microsoft authorization code was not provided.');
+  // [ms-login-fix] Microsoft sign-in: authorization code (from the small login window) -> Xbox -> XSTS -> Minecraft
+  getMicrosoftRedirectUri() {
+    return MS_REDIRECT_URI;
+  }
 
-    const tokenRes = await fetch('https://login.live.com/oauth20_token.srf', {
+  getMicrosoftLoginUrl() {
+    const state = crypto.randomBytes(16).toString('hex');
+    this._msOAuthStates = [...(this._msOAuthStates || []), state].slice(-5);
+    const params = new URLSearchParams({
+      client_id: MS_CLIENT_ID,
+      response_type: 'code',
+      redirect_uri: MS_REDIRECT_URI,
+      scope: MS_SCOPE,
+      prompt: 'select_account',
+      state
+    });
+    return `${MS_AUTHORIZE_URL}?${params.toString()}`;
+  }
+
+  async completeMicrosoftOAuthRedirect(redirectUrl) {
+    let u;
+    try { u = new URL(String(redirectUrl)); } catch (_) {
+      throw new MsAuthError('Microsoft sign-in returned an unexpected address.');
+    }
+    const err = u.searchParams.get('error');
+    if (err) {
+      if (err === 'access_denied') throw new MsAuthError('Microsoft login cancelled.', { code: 'CANCELLED' });
+      throw new MsAuthError(`Microsoft sign-in failed (${String(err).replace(/[^\w.-]/g, '').slice(0, 60)}).`);
+    }
+    const code = u.searchParams.get('code');
+    if (!code) throw new MsAuthError('Microsoft sign-in did not return an authorization code.');
+    const st = u.searchParams.get('state');
+    if (st && !(this._msOAuthStates || []).includes(st)) {
+      throw new MsAuthError('The Microsoft sign-in response did not match this request. Please try again.');
+    }
+    return this.completeMicrosoftOAuthCode(code);
+  }
+
+  async _msTokenRequest(params, isRefresh = false) {
+    const res = await msHttp('Microsoft sign-in', MS_TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: MS_CLIENT_ID,
-        code: authCode,
-        grant_type: 'authorization_code',
-        redirect_uri: MS_REDIRECT_URI,
-        scope: 'service::user.auth.xboxlive.com::MBI_SSL'
-      })
+      body: new URLSearchParams({ client_id: MS_CLIENT_ID, ...params })
     });
-    if (!tokenRes.ok) throw new Error(`Microsoft OAuth token exchange failed (HTTP ${tokenRes.status})`);
-    const msTokenData = await tokenRes.json();
+    const data = await msReadJson(res);
+    if (!res.ok) {
+      if (isRefresh && (res.status === 400 || res.status === 401)) {
+        throw new MsAuthError(MS_RELOGIN_MESSAGE, { needsRelogin: true, code: 'RELOGIN' });
+      }
+      throw new MsAuthError(
+        isRefresh ? `Microsoft is temporarily unavailable (HTTP ${res.status}).` : `Microsoft sign-in failed (HTTP ${res.status}).`,
+        { transient: isRefresh && (res.status >= 500 || res.status === 429) }
+      );
+    }
+    if (!data || typeof data.access_token !== 'string' || !data.access_token) {
+      throw new MsAuthError('Microsoft returned an unexpected response.');
+    }
+    return data;
+  }
 
-    const xblRes = await fetch('https://user.auth.xboxlive.com/user/authenticate', {
+  async _authenticateMinecraft(msAccessToken) {
+    const jsonHeaders = { 'Content-Type': 'application/json', Accept: 'application/json' };
+
+    const xblRes = await msHttp('Xbox Live', 'https://user.auth.xboxlive.com/user/authenticate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: jsonHeaders,
       body: JSON.stringify({
-        Properties: { AuthMethod: 'RPS', SiteName: 'user.auth.xboxlive.com', RpsTicket: msTokenData.access_token },
+        Properties: { AuthMethod: 'RPS', SiteName: 'user.auth.xboxlive.com', RpsTicket: `${MS_RPS_PREFIX}${msAccessToken}` },
         RelyingParty: 'http://auth.xboxlive.com', TokenType: 'JWT'
       })
     });
-    if (!xblRes.ok) throw new Error(`Xbox Live authentication failed (HTTP ${xblRes.status})`);
-    const xblData = await xblRes.json();
-    const xblToken = xblData.Token;
-    const userHash = xblData.DisplayClaims.xui[0].uhs;
+    if (!xblRes.ok) {
+      throw new MsAuthError(`Xbox Live authentication failed (HTTP ${xblRes.status}).`, { transient: xblRes.status >= 500 || xblRes.status === 429 });
+    }
+    const xblData = await msReadJson(xblRes);
+    const xblToken = xblData && xblData.Token;
+    const userHash = xblData && xblData.DisplayClaims && xblData.DisplayClaims.xui && xblData.DisplayClaims.xui[0] && xblData.DisplayClaims.xui[0].uhs;
+    if (!xblToken || !userHash) throw new MsAuthError('Xbox Live returned an unexpected response.');
 
-    const xstsRes = await fetch('https://xsts.auth.xboxlive.com/xsts/authorize', {
+    const xstsRes = await msHttp('Xbox Live', 'https://xsts.auth.xboxlive.com/xsts/authorize', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: jsonHeaders,
       body: JSON.stringify({
         Properties: { SandboxId: 'RETAIL', UserTokens: [xblToken] },
         RelyingParty: 'rp://api.minecraftservices.com/', TokenType: 'JWT'
       })
     });
-    if (!xstsRes.ok) throw new Error(`XSTS authorization failed (HTTP ${xstsRes.status})`);
-    const xstsData = await xstsRes.json();
-    const xstsToken = xstsData.Token;
+    if (!xstsRes.ok) {
+      const body = await msReadJson(xstsRes);
+      const xerr = body && body.XErr;
+      throw new MsAuthError(xstsErrorMessage(xerr, xstsRes.status), {
+        code: 'XSTS',
+        transient: !xerr && (xstsRes.status >= 500 || xstsRes.status === 429)
+      });
+    }
+    const xstsData = await msReadJson(xstsRes);
+    const xstsToken = xstsData && xstsData.Token;
+    if (!xstsToken) throw new MsAuthError('Xbox Live returned an unexpected response.');
 
-    const mcAuthRes = await fetch('https://api.minecraftservices.com/authentication/login_with_xbox', {
+    const mcRes = await msHttp('Minecraft Services', 'https://api.minecraftservices.com/authentication/login_with_xbox', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: jsonHeaders,
       body: JSON.stringify({ identityToken: `XBL3.0 x=${userHash};${xstsToken}` })
     });
-    if (!mcAuthRes.ok) throw new Error(`Minecraft Services authentication failed (HTTP ${mcAuthRes.status})`);
-    const mcAuthData = await mcAuthRes.json();
-    const mcAccessToken = mcAuthData.access_token;
+    if (!mcRes.ok) {
+      if (mcRes.status === 403) {
+        throw new MsAuthError(
+          'Minecraft rejected this launcher (HTTP 403, invalid app registration). The Microsoft app ID used by INEX CLIENT is not approved by Mojang.',
+          { code: 'APP_REGISTRATION' }
+        );
+      }
+      throw new MsAuthError(`Minecraft Services authentication failed (HTTP ${mcRes.status}).`, { transient: mcRes.status >= 500 || mcRes.status === 429 });
+    }
+    const mcData = await msReadJson(mcRes);
+    if (!mcData || typeof mcData.access_token !== 'string' || !mcData.access_token) {
+      throw new MsAuthError('Minecraft Services returned an unexpected response.');
+    }
+    const expiresIn = Number(mcData.expires_in) > 0 ? Number(mcData.expires_in) : 86400;
+    return { mcAccessToken: mcData.access_token, mcExpiresAt: Date.now() + expiresIn * 1000 };
+  }
 
-    const profileRes = await fetch('https://api.minecraftservices.com/minecraft/profile', {
-      headers: { Authorization: `Bearer ${mcAccessToken}` }
+  async completeMicrosoftOAuthCode(authCode) {
+    if (!authCode) throw new MsAuthError('Microsoft authorization code was not provided.');
+
+    const msTokenData = await this._msTokenRequest({
+      grant_type: 'authorization_code',
+      code: authCode,
+      redirect_uri: MS_REDIRECT_URI,
+      scope: MS_SCOPE
     });
-    if (!profileRes.ok) throw new Error('This Microsoft account does not own Minecraft: Java Edition.');
-    const mcProfile = await profileRes.json();
+    const mc = await this._authenticateMinecraft(msTokenData.access_token);
+
+    const profileRes = await msHttp('Minecraft Services', 'https://api.minecraftservices.com/minecraft/profile', {
+      headers: { Authorization: `Bearer ${mc.mcAccessToken}` }
+    });
+    if (profileRes.status === 404) {
+      throw new MsAuthError(
+        'This Microsoft account does not own Minecraft: Java Edition. (Xbox Game Pass players must sign in once with the official Minecraft Launcher first.)',
+        { code: 'NO_JAVA' }
+      );
+    }
+    if (!profileRes.ok) {
+      throw new MsAuthError(`Could not load the Minecraft profile (HTTP ${profileRes.status}).`, { transient: profileRes.status >= 500 || profileRes.status === 429 });
+    }
+    const mcProfile = await msReadJson(profileRes);
+    if (!mcProfile || typeof mcProfile.id !== 'string' || !mcProfile.name) {
+      throw new MsAuthError('Minecraft Services returned an unexpected profile.');
+    }
     const formattedUuid = mcProfile.id.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, '$1-$2-$3-$4-$5');
 
     const accId = `msa-${mcProfile.id}`;
+    const existingIdx = this.state.accounts.findIndex(a => a.id === accId);
+    const prev = existingIdx >= 0 ? this.state.accounts[existingIdx] : null;
+    // logging in again with the same account keeps its skin slots
     const newAcc = {
+      ...(prev || {}),
       id: accId,
       username: mcProfile.name,
       uuid: formattedUuid,
       type: 'microsoft',
       authenticatedOnline: true,
-      addedAt: new Date().toISOString(),
-      activeSkinSlot: 'slot-1',
-      skinSlots: this._defaultSkinSlots()
+      addedAt: prev && prev.addedAt ? prev.addedAt : new Date().toISOString(),
+      activeSkinSlot: prev && prev.activeSkinSlot ? prev.activeSkinSlot : 'slot-1',
+      skinSlots: prev && Array.isArray(prev.skinSlots) && prev.skinSlots.length ? prev.skinSlots : this._defaultSkinSlots()
     };
 
     this.tokens[accId] = {
-      mcAccessToken,
+      mcAccessToken: mc.mcAccessToken,
+      mcExpiresAt: mc.mcExpiresAt,
       refreshToken: msTokenData.refresh_token || null,
       updatedAt: new Date().toISOString()
     };
     this._saveTokens();
 
-    const existingIdx = this.state.accounts.findIndex(a => a.id === accId);
     if (existingIdx >= 0) this.state.accounts[existingIdx] = newAcc;
     else this.state.accounts.unshift(newAcc);
 
@@ -377,15 +642,55 @@ class AccountManager {
     return this.listAccounts();
   }
 
-  getMicrosoftLoginUrl() {
-    const params = new URLSearchParams({
-      client_id: MS_CLIENT_ID,
-      response_type: 'code',
-      redirect_uri: MS_REDIRECT_URI,
-      scope: 'service::user.auth.xboxlive.com::MBI_SSL',
-      prompt: 'select_account'
-    });
-    return `https://login.live.com/oauth20_authorize.srf?${params.toString()}`;
+  // Called right before the game starts: renews the Minecraft token when it is (almost) expired.
+  async ensureFreshActiveToken() {
+    const acc = this.state.accounts.find(a => a.id === this.state.activeAccountId) || this.state.accounts[0] || null;
+    if (!acc || acc.type !== 'microsoft') return;
+    if (!this._msRefreshing) this._msRefreshing = new Map();
+    let p = this._msRefreshing.get(acc.id);
+    if (!p) {
+      p = this._ensureFreshToken(acc).finally(() => this._msRefreshing.delete(acc.id));
+      this._msRefreshing.set(acc.id, p);
+    }
+    return p;
+  }
+
+  async _ensureFreshToken(acc) {
+    const entry = this.tokens[acc.id];
+    if (!entry || (!entry.mcAccessToken && !entry.refreshToken)) {
+      throw new MsAuthError(MS_RELOGIN_MESSAGE, { needsRelogin: true, code: 'NO_SESSION' });
+    }
+    const now = Date.now();
+    const exp = Number(entry.mcExpiresAt) || 0;
+    if (entry.mcAccessToken && exp - now > MS_REFRESH_MARGIN_MS) return;
+    if (!entry.refreshToken) throw new MsAuthError(MS_RELOGIN_MESSAGE, { needsRelogin: true, code: 'NO_REFRESH' });
+
+    try {
+      const msTokenData = await this._msTokenRequest({
+        grant_type: 'refresh_token',
+        refresh_token: entry.refreshToken,
+        redirect_uri: MS_REDIRECT_URI,
+        scope: MS_SCOPE
+      }, true);
+      // Microsoft hands out a new refresh token every time: keep it right away, before the Xbox steps
+      if (msTokenData.refresh_token) {
+        this.tokens[acc.id] = { ...entry, refreshToken: msTokenData.refresh_token };
+        this._saveTokens();
+      }
+      const mc = await this._authenticateMinecraft(msTokenData.access_token);
+      this.tokens[acc.id] = {
+        ...this.tokens[acc.id],
+        mcAccessToken: mc.mcAccessToken,
+        mcExpiresAt: mc.mcExpiresAt,
+        updatedAt: new Date().toISOString()
+      };
+      this._saveTokens();
+    } catch (err) {
+      // short network/server problem while the old token still works: just launch with it
+      if (err && err.transient && entry.mcAccessToken && exp - now > 0) return;
+      if (err instanceof MsAuthError) throw err;
+      throw new MsAuthError('Could not renew the Microsoft sign-in. Please try again.', { transient: true });
+    }
   }
 
   addSkinSlot(name) {
