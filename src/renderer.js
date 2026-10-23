@@ -952,15 +952,22 @@
 
         card.querySelector('[data-action="remove"]').addEventListener('click', async e => {
           e.stopPropagation();
-          try {
-            const updated = await api.removeAccount(acc.id);
-            state.accounts = updated.accounts;
-            state.activeAccountId = updated.activeAccountId;
-            state.skinSlots = updated.skinSlots || [];
-            renderAccountsView();
-            showToast('Identity removed');
-          } catch (err) {
-            showToast(err.message, 'error');
+          const doRemove = async deleteCloud => {
+            try {
+              const updated = await api.removeAccount(acc.id, deleteCloud);
+              state.accounts = updated.accounts;
+              state.activeAccountId = updated.activeAccountId;
+              state.skinSlots = updated.skinSlots || [];
+              renderAccountsView();
+              showToast(deleteCloud ? 'Identity deleted forever' : 'Identity removed');
+            } catch (err) {
+              showToast(err.message, 'error');
+            }
+          };
+          if (acc.type === 'local' && acc.hasCustomSkin) {
+            askRemoveChoice(acc.username, doRemove);
+          } else {
+            doRemove(false);
           }
         });
 
@@ -970,6 +977,34 @@
 
     renderSkinSlots();
     drawMinecraftSkinPreview();
+  }
+
+  function askRemoveChoice(username, onChoose) {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop open';
+    backdrop.innerHTML =
+      '<div class="modal-card glass-panel" style="max-width:460px;">' +
+      '<h3 class="modal-title">Remove identity</h3>' +
+      '<p style="font-size:13px; color:var(--text-secondary);"><b>' + esc(username) + '</b><br>' +
+      'Remove: only removes it from this PC. Your skin stays in the cloud and comes back if you add the same name again.<br>' +
+      'Delete forever: also deletes the skin from the cloud. It will not come back.</p>' +
+      '<div style="display:flex; justify-content:flex-end; gap:10px; margin-top:8px; flex-wrap:wrap;">' +
+      '<button type="button" class="btn glass-btn" data-choice="cancel">Cancel</button>' +
+      '<button type="button" class="btn glass-btn" data-choice="remove">Remove</button>' +
+      '<button type="button" class="btn btn-danger" data-choice="forever">Delete forever</button>' +
+      '</div></div>';
+    backdrop.addEventListener('click', ev => {
+      const btn = ev.target.closest('[data-choice]');
+      if (btn) {
+        const choice = btn.getAttribute('data-choice');
+        backdrop.remove();
+        if (choice === 'remove') onChoose(false);
+        else if (choice === 'forever') onChoose(true);
+      } else if (ev.target === backdrop) {
+        backdrop.remove();
+      }
+    });
+    document.body.appendChild(backdrop);
   }
 
   function renderSkinSlots() {
@@ -1057,6 +1092,15 @@
 
       container.appendChild(card);
     });
+
+    const addSlotBtn = $('addSkinSlotBtn');
+    if (addSlotBtn) {
+      const full = slots.length >= 5;
+      addSlotBtn.disabled = full;
+      addSlotBtn.style.opacity = full ? '0.45' : '';
+      addSlotBtn.style.cursor = full ? 'not-allowed' : '';
+      addSlotBtn.title = full ? 'Maximum 5 skin slots per account' : '';
+    }
   }
 
   const skinImageCache = new Map();

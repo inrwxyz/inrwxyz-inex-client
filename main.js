@@ -204,8 +204,8 @@ app.whenReady().then(() => {
   // Accounts & Skins
   ipcMain.handle('accounts:list', () => accountManager.listAccounts());
   ipcMain.handle('accounts:setActive', (_, id) => accountManager.setActiveAccount(id));
-  ipcMain.handle('accounts:addLocal', (_, username) => accountManager.addLocalAccount(username));
-  ipcMain.handle('accounts:remove', (_, id) => accountManager.removeAccount(id));
+  ipcMain.handle('accounts:addLocal', (_, username) => accountManager.addLocalAccountRestoring(username));
+  ipcMain.handle('accounts:remove', (_, id, deleteCloud) => (deleteCloud ? accountManager.deleteAccountForever(id) : accountManager.removeAccount(id)));
   ipcMain.handle('accounts:microsoftUrl', () => accountManager.getMicrosoftLoginUrl());
   ipcMain.handle('accounts:microsoftLogin', async () => {
     const authUrl = accountManager.getMicrosoftLoginUrl();

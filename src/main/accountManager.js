@@ -144,7 +144,8 @@ class AccountManager {
         type: acc.type,
         authenticatedOnline: Boolean(acc.authenticatedOnline),
         addedAt: acc.addedAt,
-        activeSkinSlot: acc.activeSkinSlot || (acc.skinSlots && acc.skinSlots.length ? acc.skinSlots[0].id : 'slot-1')
+        activeSkinSlot: acc.activeSkinSlot || (acc.skinSlots && acc.skinSlots.length ? acc.skinSlots[0].id : 'slot-1'),
+        hasCustomSkin: Boolean(acc.skinSlots && acc.skinSlots.some(s => s && s.customSkinDataUrl))
       })),
       skinSlots: activeSkinSlots
     };
@@ -202,6 +203,76 @@ class AccountManager {
     this._lastCloudFingerprint = null;
     this.syncSkinToCloud();
     return this.listAccounts();
+  }
+
+  // ---- skin-cosmetics: restore a skin from Firebase / delete it forever (local accounts only) ----
+  _cosmeticsUrl(username) {
+    return 'https://inex-cosmetics-default-rtdb.firebaseio.com/cosmetics/' + encodeURIComponent(String(username).toLowerCase()) + '.json';
+  }
+
+  // Returns { skin(base64), model } or null (not found / offline / invalid). Never throws.
+  async _fetchCloudSkin(username) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    try {
+      const res = await fetch(this._cosmeticsUrl(username), { signal: controller.signal });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data || typeof data.skin !== 'string' || !data.skin) return null;
+      const buf = Buffer.from(data.skin, 'base64');
+      if (buf.length < 8 || buf.length > 1024 * 1024 || buf.readUInt32BE(0) !== 0x89504e47) return null;
+      return { skin: buf.toString('base64'), model: data.model === 'classic' ? 'classic' : 'slim' };
+    } catch (_) {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async addLocalAccountRestoring(username) {
+    const clean = String(username || '').trim();
+    const alreadyThere = this.state.accounts.some(a => a.username.toLowerCase() === clean.toLowerCase() && a.type === 'local');
+    let cloud = null;
+    if (!alreadyThere && /^[a-zA-Z0-9_]{3,16}$/.test(clean) && this.settingsManager.getSettings().enableSkinSync !== false) {
+      cloud = await this._fetchCloudSkin(clean);
+    }
+    const result = this.addLocalAccount(clean);
+    if (cloud) {
+      const acc = this.state.accounts.find(a => a.id === this.state.activeAccountId);
+      const slot = acc && acc.skinSlots && acc.skinSlots[0];
+      if (slot) {
+        slot.customSkinDataUrl = 'data:image/png;base64,' + cloud.skin;
+        slot.model = cloud.model;
+        for (const s of acc.skinSlots) s.active = s.id === slot.id;
+        acc.activeSkinSlot = slot.id;
+        this._save();
+        // Same data is already in the cloud, so skip the pointless re-upload.
+        this._lastCloudFingerprint = crypto.createHash('sha1')
+          .update(clean.toLowerCase() + '|' + cloud.model + '|' + cloud.skin).digest('hex');
+        return this.listAccounts();
+      }
+    }
+    return result;
+  }
+
+  async deleteAccountForever(accountId) {
+    const acc = this.state.accounts.find(a => a.id === accountId);
+    if (!acc) throw new Error('Account not found.');
+    if (acc.type === 'local' && acc.username) {
+      const failMsg = 'Could not reach the cloud, so nothing was deleted. Check your internet and try again.';
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      try {
+        const res = await fetch(this._cosmeticsUrl(acc.username), { method: 'DELETE', signal: controller.signal });
+        if (!res.ok) throw new Error(failMsg);
+      } catch (_) {
+        throw new Error(failMsg);
+      } finally {
+        clearTimeout(timer);
+      }
+      this._lastCloudFingerprint = null;
+    }
+    return this.removeAccount(accountId);
   }
 
   removeAccount(accountId) {
@@ -321,6 +392,7 @@ class AccountManager {
     const activeAcc = this.state.accounts.find(a => a.id === this.state.activeAccountId);
     if (!activeAcc) throw new Error('No active account found.');
 
+    if (activeAcc.skinSlots.length >= 5) throw new Error('Maximum 5 skin slots per account.');
     const slotNum = activeAcc.skinSlots.length + 1;
     const presets = ['crimson-phantom', 'obsidian-knight', 'ash-valkyrie', 'blood-monarch'];
     const newSlot = {
@@ -608,9 +680,9 @@ class AccountManager {
       const slot = slots.find(s => s.id === acc.activeSkinSlot) || slots.find(s => s.active) || slots[0];
       if (!slot) return;
 
-      const skinBuf = slot.customSkinDataUrl && slot.customSkinDataUrl.startsWith('data:image/png;base64,')
-        ? Buffer.from(slot.customSkinDataUrl.split(',')[1], 'base64')
-        : this._generatePresetSkinPng(slot.preset || 'crimson-phantom');
+      // Default/preset skins are never uploaded (and never delete what is already in the cloud).
+      if (!(slot.customSkinDataUrl && slot.customSkinDataUrl.startsWith('data:image/png;base64,'))) return;
+      const skinBuf = Buffer.from(slot.customSkinDataUrl.split(',')[1], 'base64');
 
       const key = acc.username.toLowerCase();
       const payload = {

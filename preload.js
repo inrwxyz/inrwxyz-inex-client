@@ -30,7 +30,7 @@ contextBridge.exposeInMainWorld('inexAPI', {
   listAccounts: () => ipcRenderer.invoke('accounts:list'),
   setActiveAccount: id => ipcRenderer.invoke('accounts:setActive', id),
   addLocalAccount: username => ipcRenderer.invoke('accounts:addLocal', username),
-  removeAccount: id => ipcRenderer.invoke('accounts:remove', id),
+  removeAccount: (id, deleteCloud) => ipcRenderer.invoke('accounts:remove', id, deleteCloud),
   getMicrosoftLoginUrl: () => ipcRenderer.invoke('accounts:microsoftUrl'),
   loginMicrosoftAccount: () => ipcRenderer.invoke('accounts:microsoftLogin'),
 
