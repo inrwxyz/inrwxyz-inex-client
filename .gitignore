@@ -13,3 +13,6 @@ src-tauri/gen/
 src-tauri/backend/
 src-tauri/binaries/
 *.key
+# temporary patch files
+*.bak-before-*
+apply-*.js
