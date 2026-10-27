@@ -5,7 +5,7 @@
       "label": "Test INEX CLIENT (VS Code)",
       "type": "shell",
       "command": "npm.cmd",
-      "args": ["start"],
+      "args": ["run", "dev"],
       "group": {
         "kind": "test",
         "isDefault": true
@@ -20,7 +20,7 @@
       "label": "Build Standalone Windows .exe",
       "type": "shell",
       "command": "npm.cmd",
-      "args": ["run", "build:win"],
+      "args": ["run", "build"],
       "group": {
         "kind": "build",
         "isDefault": true

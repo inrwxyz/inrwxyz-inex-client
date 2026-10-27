@@ -1,6 +1,6 @@
 [package]
 name = "inex-client"
-version = "1.0.9"
+version = "1.1.0"
 description = "INEX CLIENT — Minecraft launcher"
 authors = ["INEX Studios"]
 edition = "2021"

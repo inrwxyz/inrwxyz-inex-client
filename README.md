@@ -1,55 +1,88 @@
-# INEX CLIENT — Windows Minecraft Launcher
+# INEX CLIENT 🎮
 
-**INEX CLIENT** is a standalone black-and-crimson Windows desktop Minecraft launcher built with **Electron**, **Node.js**, **HTML5**, **CSS3**, and **JavaScript**. It features complete profile isolation, an official Mojang version & asset installation engine, automatic Java runtime detection, multi-loader support (**Vanilla, Fabric, Quilt, Forge**), account & skin management, and an integrated **Modrinth API v2** content browser for Mods, Modpacks (`.mrpack`), Resource Packs, Shaders, and Data Packs.
+> High-performance Black & Crimson Windows Minecraft Launcher with Profile Isolation & Modrinth Integration. Built with **Tauri v2**, **Rust**, and **Node.js**.
 
-## Project Structure
+![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D6?style=flat-square&logo=windows)
+![Backend](https://img.shields.io/badge/Backend-Rust%20%2B%20Node.js-DEA584?style=flat-square&logo=rust)
+![Framework](https://img.shields.io/badge/Framework-Tauri%20v2-FFC131?style=flat-square&logo=tauri)
+![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)
 
-```text
-inex-client/
-├── package.json                 # Electron & electron-builder Windows configuration
-├── main.js                      # Secure Electron main process & IPC handlers
-├── preload.js                   # Context-isolated preload bridge (window.inexAPI)
-├── src/
-│   ├── index.html               # Launcher desktop interface (all 8 sections & modals)
-│   ├── style.css                # Black & crimson glassmorphic theme
-│   ├── renderer.js              # Frontend state & IPC controller
-│   ├── inex-logo.png            # High-resolution transparent INEX dripping-I emblem
-│   └── main/
-│       ├── settingsManager.js   # Persistent validated launcher & directory settings
-│       ├── profileManager.js    # Profile CRUD, isolated gameDirs & install verification
-│       ├── versionManager.js    # Official Mojang version_manifest_v2 fetcher & cache
-│       ├── javaManager.js       # Windows/system Java detector & compatibility checker
-│       ├── loaderManager.js     # Vanilla, Fabric, Quilt & Forge metadata resolver
-│       ├── installer.js         # 12-step Minecraft JAR/library/asset downloader + SHA1 verify
-│       ├── launcher.js          # Real child_process Java launcher & live log streamer
-│       ├── modrinthManager.js   # Official Modrinth API v2 search & .mrpack/mod installer
-│       ├── accountManager.js    # Microsoft OAuth2 + Local UUIDv3 accounts & Skin Slots
-│       └── zipUtils.js          # Pure-Node ZIP extractor with path-traversal protection
-└── test/
-    └── test-backend.js          # Automated backend verification suite
-```
+---
 
-## Quick Start on Windows
+## ✨ Features
 
-1. **Install Node.js** (v18 LTS or newer recommended) on your Windows PC.
-2. Open PowerShell or Command Prompt inside the `inex-client` folder (e.g., `E:\inex client`):
-   ```powershell
+- 🎮 **Complete Profile Isolation**:
+  - Independent `.minecraft` game directories per profile so modpacks, saves, and configs never conflict.
+  - Per-profile memory controls (RAM allocation) and custom JVM launch flags.
+- ⚡ **Multi-Loader Support**:
+  - Instant metadata resolution and installation for **Vanilla**, **Fabric**, **Quilt**, **Forge**, and **NeoForge**.
+  - Intelligent processor pipeline runner for Forge/NeoForge modded clients.
+- 📦 **Modrinth API v2 Content Browser**:
+  - Search, download, and manage **Mods**, **Modpacks** (`.mrpack`), **Resource Packs**, **Shaders**, and **Data Packs** directly inside the launcher.
+  - One-click mod toggle and dependency resolution.
+- ☕ **Smart Java Runtime Management**:
+  - Auto-detects installed Java environments (Java 8, 17, 21, 25) across your PC.
+  - Resolves version compatibility automatically based on Mojang version manifests.
+  - Portable JRE auto-bundler ensures the game always launches even without system Java installed.
+- 👤 **Accounts & 3D Skin Studio**:
+  - Supports official **Microsoft OAuth2** accounts and offline **Local** profiles.
+  - 3D animated character preview with customizable skins and waving cape renderer.
+- 🎧 **Discord Rich Presence & Live Logs**:
+  - Live Discord RPC showing active profile, game status, and Minecraft version.
+  - Integrated real-time game output console with instant error diagnostics.
+- 🌑 **OLED Crimson Aesthetic**:
+  - Deep black (`#050508`) palette with crimson accents, smooth animations, and frameless window controls.
+
+---
+
+## 🛠️ Architecture & Tech Stack
+
+- **Shell**: Tauri v2 (Rust 2021) for ultra-fast startup, lightweight memory footprint, and native Windows NSIS installer creation.
+- **Backend**: Node.js Sidecar process handling Mojang API downloads, hash verification, Java processes, and Modrinth v2 API calls.
+- **Frontend**: Hardware-accelerated Vanilla HTML5, CSS3, and ES Modules.
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) (v18+ recommended)
+- [Rust](https://rustup.rs/) (latest stable)
+- Visual Studio C++ Build Tools
+
+### Installation & Development
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/inrwxyz/inrwxyz-inex-client.git
+   cd inrwxyz-inex-client
+   ```
+
+2. Install dependencies:
+   ```bash
    npm install
    ```
-3. **Run the automated backend verification tests**:
-   ```powershell
-   npm test
-   ```
-4. **Launch INEX CLIENT in desktop mode**:
-   ```powershell
-   npm start
-   ```
-5. **Build a standalone Windows `.exe` Installer & Portable executable**:
-   ```powershell
-   npm run build:win
-   ```
-   The compiled Windows installer and portable `.exe` will be output to the `dist/` directory.
 
-## Replacing or Customizing the INEX Logo
+3. Run in development mode:
+   ```bash
+   npm run dev
+   ```
 
-The launcher loads `src/inex-logo.png` for both the top titlebar brand mark and the central faint background watermark (preserving its 1:1 aspect ratio without cropping or stretching). You can replace `src/inex-logo.png` with any updated transparent PNG and restart the launcher.
+4. Build production installer:
+   ```bash
+   npm run build
+   ```
+   The compiled setup installer (`.exe`) and updater artifacts will be created in `src-tauri/target/release/bundle/nsis/`.
+
+---
+
+## 👨‍💻 Author
+
+Developed by **[@inrwxyz](https://github.com/inrwxyz)** — INEX Studios.
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License.
