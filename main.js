@@ -59,8 +59,8 @@ app.whenReady().then(() => {
   const accountManager = new AccountManager(settingsManager);
   const installer = new MinecraftInstaller({ settingsManager, versionManager, loaderManager, javaManager, profileManager });
   const discordRpcManager = new DiscordRpcManager(settingsManager);
-  const launcher = new MinecraftLauncher({ settingsManager, profileManager, versionManager, loaderManager, javaManager, accountManager, installer, discordRpcManager });
   const modrinthManager = new ModrinthManager({ settingsManager, profileManager });
+  const launcher = new MinecraftLauncher({ settingsManager, profileManager, versionManager, loaderManager, javaManager, accountManager, installer, discordRpcManager, modrinthManager });
   const serverManager = new ServerManager({ settingsManager, versionManager, javaManager });
   const playitManager = new PlayitManager({ settingsManager });
   const codeAccess = new CodeAccess({ settingsManager });
@@ -115,16 +115,6 @@ app.whenReady().then(() => {
     }
     throw new Error('Invalid external URL.');
   });
-  ipcMain.handle('discord:widget', async () => {
-    try {
-      const res = await fetch('https://discord.com/api/guilds/1501171776292651040/widget.json', { headers: { Accept: 'application/json' } });
-      if (res.status === 403) return { ok: false, error: 'disabled' };
-      if (!res.ok) return { ok: false, error: 'http_' + res.status };
-      return { ok: true, data: await res.json() };
-    } catch (e) {
-      return { ok: false, error: 'network' };
-    }
-  });
 
   // Bootstrap state
   ipcMain.handle('get-bootstrap-state', async () => {
@@ -170,7 +160,18 @@ app.whenReady().then(() => {
 
   // Profiles
   ipcMain.handle('profiles:list', () => profileManager.listProfiles());
-  ipcMain.handle('profiles:create', (_, payload) => profileManager.createProfile(payload));
+  ipcMain.handle('profiles:create', (_, payload) => {
+    const created = profileManager.createProfile(payload);
+    // Performance Pack installs in the background so creating a profile stays instant.
+    if (created && created.profile && created.profile.perfPackEnabled) {
+      const sendProgress = data => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('event:install-progress', data);
+      };
+      modrinthManager.installPerformancePack(created.profile.id, { onProgress: sendProgress })
+        .catch(err => console.error('[PerfPack]', err && err.message));
+    }
+    return created;
+  });
   ipcMain.handle('profiles:update', (_, id, updates) => profileManager.updateProfile(id, updates));
   ipcMain.handle('profiles:delete', (_, id) => profileManager.deleteProfile(id));
   ipcMain.handle('profiles:setActive', (_, id) => {
@@ -204,8 +205,8 @@ app.whenReady().then(() => {
   // Accounts & Skins
   ipcMain.handle('accounts:list', () => accountManager.listAccounts());
   ipcMain.handle('accounts:setActive', (_, id) => accountManager.setActiveAccount(id));
-  ipcMain.handle('accounts:addLocal', (_, username) => accountManager.addLocalAccountRestoring(username));
-  ipcMain.handle('accounts:remove', (_, id, deleteCloud) => (deleteCloud ? accountManager.deleteAccountForever(id) : accountManager.removeAccount(id)));
+  ipcMain.handle('accounts:addLocal', (_, username) => accountManager.addLocalAccount(username));
+  ipcMain.handle('accounts:remove', (_, id) => accountManager.removeAccount(id));
   ipcMain.handle('accounts:microsoftUrl', () => accountManager.getMicrosoftLoginUrl());
   ipcMain.handle('accounts:microsoftLogin', async () => {
     // [ms-login-fix] small Microsoft sign-in window; the redirect is caught automatically (nothing to copy or paste)
@@ -447,16 +448,10 @@ app.whenReady().then(() => {
   ipcMain.handle('access:create', (_, serverId) => codeAccess.createCode(serverId));
   ipcMain.handle('access:cancel', () => codeAccess.cancelCode());
   ipcMain.handle('access:disconnect', () => codeAccess.disconnect());
-  ipcMain.handle('access:check', (_, code) => codeAccess.check(code));
-  ipcMain.handle('p2p:signalSend', (_, role, code, sid, data) => codeAccess.signalSend(role, code, sid, data));
-  ipcMain.handle('p2p:signalPoll', (_, role, code, sid) => codeAccess.signalPoll(role, code, sid));
-  ipcMain.handle('p2p:end', (_, role, code, sid) => codeAccess.end(role, code, sid));
   ipcMain.handle('p2p:claim', (_, code, sid) => codeAccess.claim(code, sid));
   ipcMain.handle('p2p:hostOpened', (_, code) => codeAccess.hostOpened(code));
   ipcMain.handle('p2p:hostClosed', (_, code) => codeAccess.hostClosed(code));
   ipcMain.handle('p2p:exec', (_, code, method, args) => codeAccess.p2pExec(code, method, args));
-
-  codeAccess.autoStart();
 
   serverManager.on('status', d => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('event:server-status', d);

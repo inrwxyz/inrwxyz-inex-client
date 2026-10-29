@@ -1,9 +1,9 @@
 /* INEX CLIENT — Interface Styles */
 
 :root {
-  --bg-deep: #050508;
-  --bg-main: #09090e;
-  --bg-input: rgba(12, 12, 18, 0.85);
+  --bg-deep: #040404;
+  --bg-main: #070707;
+  --bg-input: rgba(9, 9, 9, 0.85);
   --crimson-500: #e11d48;
   --crimson-600: #be123c;
   --crimson-400: #fb7185;
@@ -14,8 +14,8 @@
   --border-hover: rgba(255, 255, 255, 0.20);
   --border-crimson: rgba(225, 29, 72, 0.55);
   --glass-blur: 24px;
-  --glass-fill: linear-gradient(145deg, rgba(24, 14, 22, 0.72) 0%, rgba(12, 10, 16, 0.82) 100%);
-  --glass-fill-strong: linear-gradient(145deg, rgba(28, 12, 20, 0.78) 0%, rgba(10, 10, 16, 0.88) 100%);
+  --glass-fill: linear-gradient(145deg, rgba(12, 12, 12, 0.72) 0%, rgba(8, 8, 8, 0.82) 100%);
+  --glass-fill-strong: linear-gradient(145deg, rgba(12, 12, 12, 0.78) 0%, rgba(7, 7, 7, 0.88) 100%);
   --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   --text-primary: #f6f6fa;
   --text-secondary: #a9a9c0;
@@ -61,8 +61,8 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
   display: flex; flex-direction: column; width: 100vw; height: 100vh;
   position: relative; overflow: hidden;
   background:
-    radial-gradient(ellipse 65% 55% at 50% 35%, rgba(190, 18, 60, 0.16) 0%, rgba(5, 5, 8, 0) 70%),
-    linear-gradient(165deg, #0d080c 0%, #050508 75%);
+    radial-gradient(ellipse 65% 55% at 50% 35%, rgba(190, 18, 60, 0.16) 0%, rgba(4, 4, 4, 0) 70%),
+    linear-gradient(165deg, #070707 0%, #040404 75%);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -87,7 +87,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 .glass-btn {
-  background: rgba(24, 24, 34, 0.78);
+  background: rgba(17, 17, 17, 0.78);
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
@@ -112,7 +112,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 .dock {
   width: 78px; flex-shrink: 0; border-radius: 22px; padding: 12px 8px;
   display: flex; flex-direction: column; justify-content: space-between; align-items: center;
-  background: rgba(14, 12, 18, 0.85); border: 1px solid var(--border-subtle);
+  background: rgba(9, 9, 9, 0.85); border: 1px solid var(--border-subtle);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
 }
 .dock-group { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; }
@@ -137,7 +137,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 }
 .version-tag { font-size: 10px; color: var(--text-muted); font-weight: 600; margin-top: 4px; }
 
-.avatar-head { width: 28px; height: 28px; border-radius: 8px; background: #181822; border: 1px solid rgba(255, 255, 255, 0.14); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; }
+.avatar-head { width: 28px; height: 28px; border-radius: 8px; background: #111111; border: 1px solid rgba(255, 255, 255, 0.14); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; }
 .avatar-head svg { width: 100%; height: 100%; display: block; }
 
 /* ---------- Main Stage ---------- */
@@ -153,7 +153,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 .home-hero-frame {
   flex: 1; position: relative; border-radius: 22px; padding: 36px 48px;
   display: flex; align-items: center; justify-content: center;
-  background: radial-gradient(ellipse 75% 65% at 50% 45%, rgba(190, 18, 60, 0.16) 0%, rgba(10, 10, 15, 0.65) 100%);
+  background: #030303;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.5);
 }
@@ -170,12 +170,12 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 .home-emblem-outer {
   width: 190px; height: 190px; padding: 10px; border-radius: 36px;
   border: 1.5px dashed rgba(225, 29, 72, 0.45);
-  background: radial-gradient(circle at 50% 35%, rgba(225, 29, 72, 0.14) 0%, rgba(10, 10, 16, 0.4) 100%);
+  background: #050505;
   margin-bottom: 22px; display: flex; align-items: center; justify-content: center;
 }
 .home-emblem-inner {
   width: 100%; height: 100%; border-radius: 26px; overflow: hidden;
-  background: #050508; border: 2px solid rgba(225, 29, 72, 0.65);
+  background: #040404; border: 2px solid rgba(225, 29, 72, 0.65);
   box-shadow: 0 14px 38px rgba(0, 0, 0, 0.75), 0 0 24px rgba(225, 29, 72, 0.25);
   display: flex; align-items: center; justify-content: center;
 }
@@ -188,7 +188,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 .home-specs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .spec-tile {
   display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px;
-  background: rgba(17, 17, 26, 0.85); border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(12, 12, 12, 0.85); border: 1px solid rgba(255, 255, 255, 0.08);
   position: relative; overflow: hidden;
 }
 .spec-bar { width: 3px; height: 28px; border-radius: 4px; background: var(--crimson-500); box-shadow: 0 0 10px var(--crimson-500); flex-shrink: 0; }
@@ -224,10 +224,10 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 .quick-profile-pill {
   display: flex; align-items: center; justify-content: center; gap: 9px;
   padding: 10px 12px; border-radius: 11px; min-height: 48px;
-  background: rgba(17, 17, 26, 0.85); border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(12, 12, 12, 0.85); border: 1px solid rgba(255, 255, 255, 0.10);
   color: var(--text-primary); cursor: pointer; transition: 0.16s; font-size: 12px; font-weight: 700;
 }
-.quick-profile-pill:hover { border-color: var(--border-hover); background: rgba(26, 26, 38, 0.92); }
+.quick-profile-pill:hover { border-color: var(--border-hover); background: rgba(19, 19, 19, 0.92); }
 .quick-profile-pill.active { border-color: var(--crimson-500); background: rgba(225, 29, 72, 0.14); }
 .quick-pill-icon { width: 26px; height: 26px; border-radius: 7px; background: rgba(225, 29, 72, 0.20); border: 1px solid rgba(225, 29, 72, 0.45); display: flex; align-items: center; justify-content: center; color: var(--crimson-400); font-weight: 800; font-size: 11px; flex-shrink: 0; }
 
@@ -241,7 +241,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
   border-radius: 10px; padding: 10px 14px; color: var(--text-primary);
   font-family: inherit; font-size: 13.5px; outline: none; transition: 0.16s; user-select: text;
 }
-.inex-select option { background: #101018; color: #f5f5f8; }
+.inex-select option { background: #0c0c0c; color: #f5f5f8; }
 .search-input-wrap .inex-input { padding-left: 38px; }
 .inex-input:focus, .inex-select:focus { border-color: var(--crimson-500) !important; box-shadow: 0 0 0 2px rgba(225, 29, 72, 0.2); }
 .num-input { width: 96px; text-align: center; font-weight: 700; }
@@ -249,7 +249,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
   padding: 9px 15px; border-radius: 10px; font-size: 12.5px; font-weight: 700;
-  border: 1px solid var(--border-subtle); background: rgba(24, 24, 35, 0.85);
+  border: 1px solid var(--border-subtle); background: rgba(17, 17, 17, 0.85);
   color: var(--text-primary); cursor: pointer; transition: 0.16s; white-space: nowrap;
 }
 .btn:hover { background: rgba(36, 36, 52, 0.95); border-color: var(--border-hover); }
@@ -290,7 +290,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 
 .add-card-tile {
   min-height: 140px; border-radius: 18px; border: 1px dashed rgba(255, 255, 255, 0.18);
-  background: rgba(16, 16, 24, 0.45); display: flex; flex-direction: column;
+  background: rgba(12, 12, 12, 0.45); display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 8px; color: var(--text-secondary);
   cursor: pointer; transition: 0.18s; font-weight: 700; font-size: 13px;
 }
@@ -302,7 +302,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 }
 .create-form-panel {
   border-radius: 18px; padding: 22px; display: flex; flex-direction: column; gap: 16px;
-  background: linear-gradient(165deg, rgba(32, 12, 20, 0.85) 0%, rgba(12, 10, 16, 0.94) 100%);
+  background: linear-gradient(165deg, rgba(13, 13, 13, 0.85) 0%, rgba(8, 8, 8, 0.94) 100%);
   border: 1px solid rgba(225, 29, 72, 0.45);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.6);
 }
@@ -313,7 +313,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 .top-box-btn {
   display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px;
   border-radius: 9px; border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(22, 22, 32, 0.85); color: #fff; font-size: 10px;
+  background: rgba(16, 16, 16, 0.85); color: #fff; font-size: 10px;
   font-weight: 800; letter-spacing: 0.05em; text-align: left; line-height: 1.15; cursor: pointer;
 }
 .top-box-btn .ico { color: var(--crimson-400); }
@@ -337,7 +337,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 
 .hud-check-card {
   display: flex; flex-direction: column; gap: 6px; padding: 13px 15px;
-  border-radius: 12px; background: rgba(16, 14, 22, 0.78);
+  border-radius: 12px; background: rgba(11, 11, 11, 0.78);
   border: 1px solid rgba(225, 29, 72, 0.28); cursor: pointer;
 }
 .hud-check-row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #fff; }
@@ -357,13 +357,13 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 .version-posters-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .engine-preset-card {
   display: flex; align-items: center; gap: 14px; padding: 14px 16px;
-  border-radius: 14px; background: linear-gradient(135deg, rgba(28, 14, 22, 0.72) 0%, rgba(14, 12, 18, 0.88) 100%);
+  border-radius: 14px; background: linear-gradient(135deg, rgba(13, 13, 13, 0.72) 0%, rgba(9, 9, 9, 0.88) 100%);
   border: 1.5px solid rgba(255, 255, 255, 0.09); cursor: pointer; transition: 0.18s;
 }
 .engine-preset-card:hover { border-color: rgba(225, 29, 72, 0.45); transform: translateY(-1px); }
 .engine-preset-card.selected {
   border-color: var(--crimson-500);
-  background: linear-gradient(135deg, rgba(225, 29, 72, 0.22) 0%, rgba(20, 12, 18, 0.92) 100%);
+  background: linear-gradient(135deg, rgba(225, 29, 72, 0.22) 0%, rgba(10, 10, 10, 0.92) 100%);
   box-shadow: 0 8px 26px rgba(225, 29, 72, 0.22);
 }
 .preset-icon-box {
@@ -404,7 +404,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 .modrinth-list { display: flex; flex-direction: column; gap: 10px; }
 .modrinth-item-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 16px; border-radius: 14px; background: var(--glass-fill); border: 1px solid var(--border-subtle); }
 .modrinth-item-left { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1; }
-.mod-icon { width: 46px; height: 46px; border-radius: 12px; background: #181822; border: 1px solid var(--border-subtle); object-fit: cover; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; color: var(--crimson-400); }
+.mod-icon { width: 46px; height: 46px; border-radius: 12px; background: #111111; border: 1px solid var(--border-subtle); object-fit: cover; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; color: var(--crimson-400); }
 .mod-details { min-width: 0; flex: 1; }
 .mod-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .mod-title { font-size: 14px; font-weight: 700; color: #fff; }
@@ -426,7 +426,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 .identities-panel {
   border-radius: 18px; padding: 18px; display: flex; flex-direction: column;
   justify-content: flex-start;
-  background: linear-gradient(165deg, rgba(28, 12, 20, 0.78) 0%, rgba(10, 10, 16, 0.90) 100%);
+  background: linear-gradient(165deg, rgba(12, 12, 12, 0.78) 0%, rgba(7, 7, 7, 0.90) 100%);
   border: 1px solid rgba(225, 29, 72, 0.30);
 }
 .identities-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex: 0 0 auto; }
@@ -435,17 +435,17 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 
 .identity-card {
   display: flex; align-items: center; gap: 12px; padding: 12px 14px;
-  border-radius: 13px; background: rgba(18, 14, 22, 0.75);
+  border-radius: 13px; background: rgba(11, 11, 11, 0.75);
   border: 1.5px solid rgba(255, 255, 255, 0.08); cursor: pointer; transition: 0.16s;
   flex: 0 0 auto;
 }
 .identity-card:hover { border-color: rgba(225, 29, 72, 0.45); }
 .identity-card.active {
   border-color: var(--crimson-500);
-  background: linear-gradient(135deg, rgba(225, 29, 72, 0.20) 0%, rgba(20, 12, 18, 0.90) 100%);
+  background: linear-gradient(135deg, rgba(225, 29, 72, 0.20) 0%, rgba(10, 10, 10, 0.90) 100%);
   box-shadow: 0 6px 22px rgba(225, 29, 72, 0.22);
 }
-.identity-avatar { width: 40px; height: 40px; border-radius: 10px; background: #14141d; border: 1px solid rgba(225, 29, 72, 0.4); overflow: hidden; flex-shrink: 0; }
+.identity-avatar { width: 40px; height: 40px; border-radius: 10px; background: #0e0e0e; border: 1px solid rgba(225, 29, 72, 0.4); overflow: hidden; flex-shrink: 0; }
 .identity-avatar svg { width: 100%; height: 100%; display: block; }
 .identity-meta { flex: 1; min-width: 0; }
 .identity-name { font-size: 14.5px; font-weight: 800; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -455,7 +455,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 
 .skin-studio-panel {
   border-radius: 18px; padding: 18px 22px; display: flex; flex-direction: column; gap: 14px;
-  background: linear-gradient(165deg, rgba(28, 12, 20, 0.78) 0%, rgba(10, 10, 16, 0.90) 100%);
+  background: linear-gradient(165deg, rgba(12, 12, 12, 0.78) 0%, rgba(7, 7, 7, 0.90) 100%);
   border: 1px solid rgba(225, 29, 72, 0.30); overflow-y: auto;
 }
 .studio-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -465,7 +465,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 
 .skin-sync-pill {
   display: flex; align-items: center; gap: 10px; padding: 6px 12px;
-  border-radius: 11px; background: rgba(24, 20, 18, 0.85);
+  border-radius: 11px; background: rgba(13, 13, 13, 0.85);
   border: 1px solid rgba(245, 158, 11, 0.45);
 }
 .skin-sync-pill.sync-on { border-color: rgba(16, 185, 129, 0.45); }
@@ -484,7 +484,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 
 .skin-preview-stage {
   border-radius: 14px; padding: 14px; display: flex; align-items: center; justify-content: center;
-  background-color: rgba(20, 8, 14, 0.85);
+  background-color: rgba(9, 9, 9, 0.85);
   background-image:
     linear-gradient(rgba(225, 29, 72, 0.06) 1px, transparent 1px),
     linear-gradient(90deg, rgba(225, 29, 72, 0.06) 1px, transparent 1px);
@@ -496,7 +496,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 .studio-slots-list { display: flex; flex-direction: column; gap: 12px; }
 .skin-slot-card {
   border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px;
-  background: rgba(16, 14, 22, 0.85); border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(11, 11, 11, 0.85); border: 1px solid rgba(255, 255, 255, 0.09);
 }
 .skin-slot-card.active {
   border-color: rgba(16, 185, 129, 0.45);
@@ -536,14 +536,14 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 .settings-tab-btn {
   position: relative; display: flex; align-items: center; gap: 10px;
   padding: 13px 16px; border-radius: 11px;
-  background: rgba(16, 16, 24, 0.78); border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(12, 12, 12, 0.78); border: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--text-secondary); font-size: 11.5px; font-weight: 800;
   letter-spacing: 0.08em; cursor: pointer; transition: 0.16s; text-align: left;
 }
 .settings-tab-btn:hover { color: #fff; border-color: rgba(255, 255, 255, 0.18); }
 .settings-tab-btn.active {
   color: #fff; border-color: var(--crimson-500);
-  background: linear-gradient(90deg, rgba(225, 29, 72, 0.24) 0%, rgba(24, 14, 22, 0.88) 100%);
+  background: linear-gradient(90deg, rgba(225, 29, 72, 0.24) 0%, rgba(12, 12, 12, 0.88) 100%);
   box-shadow: 0 6px 20px rgba(225, 29, 72, 0.2);
 }
 .settings-tab-btn.active .ico { color: var(--crimson-400); }
@@ -560,7 +560,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 .bracket-card {
   position: relative; display: flex; align-items: center; justify-content: space-between;
   gap: 18px; padding: 18px 22px; border-radius: 14px;
-  background: rgba(14, 13, 20, 0.86); border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 10, 10, 0.86); border: 1px solid rgba(255, 255, 255, 0.08);
 }
 .bracket-card::before {
   content: ''; position: absolute; top: 7px; left: 7px; width: 12px; height: 12px;
@@ -687,7 +687,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 .srv-danger:hover { background: rgba(239,68,68,0.18); }
 .srv-body { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }
 
-.srv-console { flex: 1; min-height: 200px; overflow-y: auto; padding: 12px 14px; border-radius: var(--radius-md); background: rgba(4,4,8,0.8); border: 1px solid var(--border-subtle); font-family: Consolas, 'Cascadia Mono', 'Courier New', monospace; font-size: 12px; line-height: 1.55; user-select: text; }
+.srv-console { flex: 1; min-height: 200px; overflow-y: auto; padding: 12px 14px; border-radius: var(--radius-md); background: rgba(3, 3, 3,0.8); border: 1px solid var(--border-subtle); font-family: Consolas, 'Cascadia Mono', 'Courier New', monospace; font-size: 12px; line-height: 1.55; user-select: text; }
 .srv-console * { user-select: text; }
 .srv-line { white-space: pre-wrap; word-break: break-word; color: #cfcfe0; }
 .srv-line.warn { color: #fcd34d; }
@@ -707,7 +707,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 .srv-prop-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .srv-prop-text label { font-size: 13px; font-weight: 600; cursor: pointer; }
 .srv-prop-text small { font-size: 11px; color: var(--text-muted); line-height: 1.35; }
-.srv-props-save { display: flex; align-items: center; justify-content: space-between; gap: 12px; position: sticky; bottom: 0; padding: 12px 0 4px; background: rgba(9,9,14,0.96); border-top: 1px solid var(--border-subtle); }
+.srv-props-save { display: flex; align-items: center; justify-content: space-between; gap: 12px; position: sticky; bottom: 0; padding: 12px 0 4px; background: rgba(7, 7, 7,0.96); border-top: 1px solid var(--border-subtle); }
 .srv-props-note { font-size: 12px; color: var(--text-muted); }
 
 .srv-create { overflow-y: auto; }
@@ -767,7 +767,7 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 .srv-net-title small { color: var(--text-muted); font-size: 11.5px; }
 .srv-net-row { display: flex; align-items: center; gap: 10px; }
 .srv-net-label { width: 190px; flex-shrink: 0; font-size: 12px; color: var(--text-secondary); }
-.srv-net-value { flex: 1; min-width: 0; padding: 7px 10px; border-radius: 8px; background: rgba(4,4,8,0.7); border: 1px solid var(--border-subtle); font-family: Consolas, 'Cascadia Mono', monospace; font-size: 12.5px; user-select: text; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srv-net-value { flex: 1; min-width: 0; padding: 7px 10px; border-radius: 8px; background: rgba(3, 3, 3,0.7); border: 1px solid var(--border-subtle); font-family: Consolas, 'Cascadia Mono', monospace; font-size: 12.5px; user-select: text; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .srv-net-note { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; font-size: 12.5px; color: var(--text-secondary); background: rgba(255,255,255,0.05); border: 1px solid var(--border-subtle); }
 .srv-net-note.warn { color: #fcd34d; border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.08); }
 .srv-net-note.ok { color: #6ee7b7; border-color: rgba(16,185,129,0.4); background: rgba(16,185,129,0.08); }
@@ -778,3 +778,194 @@ code { font-family: Consolas, 'Courier New', monospace; font-size: 0.92em; color
 .srv-spin { display: inline-block; width: 12px; height: 12px; margin-right: 8px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.2); border-top-color: var(--crimson-400); animation: srvSpin .8s linear infinite; vertical-align: -2px; }
 @keyframes srvSpin { to { transform: rotate(360deg); } }
 @media (max-width: 900px) { .srv-padd { grid-template-columns: 1fr; } .srv-net-label { width: 120px; } }
+
+
+/* =====================================================================
+   DEEP BLACK THEME  +  SOFT HOVER GLOW  +  MAIN MENU
+   (kept at the very end so it wins over everything above)
+   ===================================================================== */
+:root {
+  --bg-deep: #000;
+  --bg-main: #050505;
+  --bg-input: rgba(6, 6, 6, 0.9);
+  --glass-fill: linear-gradient(145deg, rgba(10, 10, 10, 0.92) 0%, rgba(4, 4, 4, 0.95) 100%);
+  --glass-fill-strong: linear-gradient(145deg, rgba(12, 12, 12, 0.95) 0%, rgba(3, 3, 3, 0.97) 100%);
+  --hover-glow: 0 0 0 1px rgba(255, 255, 255, 0.10), 0 0 16px rgba(225, 29, 72, 0.26), 0 0 34px rgba(225, 29, 72, 0.10);
+}
+
+html, body { background: #000; }
+.app-shell { background: #000; border-color: rgba(255, 255, 255, 0.07); }
+.ambient-glass-orb { display: none !important; }
+.dock { background: #060606; border-color: rgba(255, 255, 255, 0.07); }
+
+/* ---------- soft glow on every clickable thing ---------- */
+.nav-btn, .btn, .btn-crimson, .btn-danger, .icon-btn, .win-btn, .profile-card, .add-card-tile,
+.identity-card, .engine-preset-card, .srv-item, .srv-copy, .srv-danger, .srv-loader, .srv-pdanger,
+.srv-linkbtn, .dropdown-item, .settings-tab-btn, .quick-profile-pill, .launch-split-box,
+.launch-dropdown-trigger, .top-box-btn, .refresh-pill-btn, .identity-remove-btn, .home-emblem-outer,
+.mm-item, button, select, [role="button"] {
+  transition: box-shadow 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, filter 0.18s ease, transform 0.18s ease;
+}
+
+.nav-btn:hover, .btn:hover, .btn-crimson:hover, .btn-danger:hover, .icon-btn:hover, .win-btn:hover,
+.profile-card:hover, .add-card-tile:hover, .identity-card:hover, .engine-preset-card:hover,
+.srv-item:hover, .srv-copy:hover, .srv-danger:hover, .srv-loader:hover, .srv-pdanger:hover,
+.srv-linkbtn:hover, .dropdown-item:hover, .settings-tab-btn:hover, .quick-profile-pill:hover,
+.launch-split-box:hover, .launch-dropdown-trigger:hover, .top-box-btn:hover, .refresh-pill-btn:hover,
+.identity-remove-btn:hover, .mm-item:hover, button:not(:disabled):hover, select:hover, [role="button"]:hover {
+  box-shadow: var(--hover-glow);
+}
+.nav-btn.active:hover { box-shadow: 0 4px 16px rgba(225, 29, 72, 0.25), var(--hover-glow); }
+.win-btn.close:hover { box-shadow: 0 0 14px rgba(225, 29, 72, 0.5); }
+button:disabled:hover { box-shadow: none; }
+input:hover, textarea:hover, select:focus, input:focus, textarea:focus {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 0 14px rgba(225, 29, 72, 0.18);
+}
+
+/* ---------- centre emblem = main menu button ---------- */
+.home-emblem-outer { cursor: pointer; }
+.home-emblem-outer:hover { transform: scale(1.025); }
+.home-emblem-outer:focus-visible { outline: 2px solid var(--crimson-400); outline-offset: 4px; }
+
+/* ---------- main menu overlay ---------- */
+.mm-overlay {
+  position: fixed; inset: 0; z-index: 900; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.82); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  opacity: 0; transition: opacity 0.16s ease;
+}
+.mm-overlay[hidden] { display: none; }
+.mm-overlay.show { opacity: 1; }
+.mm-panel {
+  width: min(460px, 92vw); padding: 30px 28px 28px; border-radius: 24px; text-align: center;
+  background: #050505; border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.9), 0 0 40px rgba(225, 29, 72, 0.08);
+  transform: translateY(8px) scale(0.98); transition: transform 0.18s ease;
+}
+.mm-overlay.show .mm-panel { transform: none; }
+.mm-logo { width: 84px; height: 84px; object-fit: cover; border-radius: 22px; border: 2px solid rgba(225, 29, 72, 0.6); background: #000; box-shadow: 0 0 24px rgba(225, 29, 72, 0.22); }
+.mm-title { margin-top: 14px; font-family: var(--font-display); font-size: 24px; font-weight: 900; letter-spacing: 0.14em; color: #fff; }
+.mm-title span { color: var(--crimson-500); }
+.mm-sub { margin: 4px 0 20px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.24em; color: var(--text-secondary); }
+.mm-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.mm-item {
+  display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 14px; cursor: pointer;
+  background: #0a0a0a; border: 1px solid rgba(255, 255, 255, 0.08); color: var(--text-secondary);
+  font-size: 14px; font-weight: 700; text-align: left;
+}
+.mm-item:hover, .mm-item:focus-visible { color: #fff; border-color: rgba(225, 29, 72, 0.5); background: #0e0e0e; outline: none; box-shadow: var(--hover-glow); }
+
+
+/* =====================================================================
+   NEUTRAL OPTIONS THEME
+   - Crimson is ONLY for: Launch Game / Start Server / Create Server (.btn-launch + .launch-split-box)
+   - Every other option = near-black, subtle border, crimson border + glow on hover (same as Play screen)
+   - No green, no crimson tint on panels. Holographic skin stage keeps its own crimson grid.
+   ===================================================================== */
+:root { --opt-bg: rgba(12, 12, 12, 0.85); --opt-border: rgba(255, 255, 255, 0.10); --opt-hover-border: rgba(225, 29, 72, 0.6); --opt-active-border: rgba(255, 255, 255, 0.30); --opt-active-bg: rgba(255, 255, 255, 0.06); }
+
+/* ---------- Play screen: text-only wordmark (logo removed) ---------- */
+.home-brand-col { align-items: flex-start; }
+.home-brand-title { font-size: 44px; cursor: default; width: fit-content; outline: none; user-select: none; }
+.home-brand-subtitle { margin-top: 12px; }
+
+/* ---------- The ONLY crimson buttons ---------- */
+.btn-launch, .btn-launch:hover {
+  background: linear-gradient(90deg, #e11d48 0%, #be123c 60%, #881337 100%);
+  border-color: rgba(255, 140, 165, 0.5); color: #fff;
+  box-shadow: 0 10px 36px rgba(225, 29, 72, 0.42);
+}
+.btn-launch:hover { transform: translateY(-1px); box-shadow: 0 14px 42px rgba(225, 29, 72, 0.55); filter: brightness(1.06); }
+.btn-launch:disabled { filter: grayscale(0.5); }
+
+/* ---------- Everything that used to be crimson => neutral option ---------- */
+.btn-crimson, .btn-slot-active {
+  background: var(--opt-bg); border-color: rgba(255, 255, 255, 0.16); color: var(--text-primary); box-shadow: none;
+}
+.btn-slot-active { color: #e8e8ee; }
+.btn-crimson:hover { background: rgba(19, 19, 19, 0.92); }
+
+/* hover = crimson border + glow, exactly like the Play-screen options */
+.btn:hover, .glass-btn:hover, .quick-profile-pill:hover, .identity-card:hover, .profile-card:hover,
+.engine-preset-card:hover, .srv-loader:hover, .srv-item:hover, .settings-tab-btn:hover, .top-box-btn:hover,
+.add-card-tile:hover, .refresh-pill-btn:hover, .type-pill-btn:hover, .acc-type-tile:hover, .hud-check-card:hover,
+.icon-btn:not(.danger):hover, .dropdown-item:hover, .mm-item:hover, .skin-slot-card:hover {
+  border-color: var(--opt-hover-border);
+}
+.btn-launch:hover { border-color: rgba(255, 140, 165, 0.5); }
+
+/* selected / active = soft white outline, no crimson tint */
+.quick-profile-pill.active, .identity-card.active, .profile-card.active, .engine-preset-card.selected,
+.settings-tab-btn.active, .type-pill-btn.active, .srv-item.active, .srv-loader.active, .acc-type-tile.selected,
+.dropdown-item.active {
+  border-color: var(--opt-active-border); background: var(--opt-active-bg); box-shadow: none;
+}
+.identity-card.active { background: linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(10,10,10,0.90) 100%); }
+.engine-preset-card.selected { background: linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(10,10,10,0.92) 100%); }
+.settings-tab-btn.active { background: linear-gradient(90deg, rgba(255,255,255,0.08) 0%, rgba(12,12,12,0.88) 100%); }
+.settings-tab-btn.active .ico { color: #fff; }
+.settings-tab-btn.active::after { background: rgba(255, 255, 255, 0.45); }
+.dropdown-item:hover { background: rgba(255, 255, 255, 0.06); }
+.add-card-tile:hover { background: rgba(255, 255, 255, 0.04); }
+.quick-profile-pill:hover { background: rgba(19, 19, 19, 0.92); }
+.profile-card.active { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.10); }
+.active-check-badge { background: #e8e8ee; color: #000; }
+
+/* small icon tiles / chips / avatars */
+.quick-pill-icon, .profile-avatar, .srv-empty-ico, .srv-pavatar {
+  background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.14); color: #e4e4ec;
+}
+.identity-avatar { border-color: rgba(255, 255, 255, 0.14); }
+.identity-type { color: var(--text-secondary); }
+.value-chip, .srv-pbadge, .modpack-notice-banner {
+  background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.16); color: #e4e4ec;
+}
+.srv-ram-val, .presets-title { color: #e4e4ec; }
+.hud-check-card { border-color: rgba(255, 255, 255, 0.09); }
+.top-box-btn .ico, .field-label-left .ico, .settings-tab-btn.active .ico { color: var(--text-secondary); }
+
+/* ---------- Accounts screen: border lines like the Play screen, no green ---------- */
+.identities-panel, .skin-studio-panel { border: 1px solid rgba(255, 255, 255, 0.08); }
+/* holographic stage keeps its crimson grid + border */
+.skin-preview-stage { border: 1px solid rgba(225, 29, 72, 0.25); }
+
+.skin-sync-pill, .skin-sync-pill.sync-on { border-color: rgba(255, 255, 255, 0.14); }
+.sync-bolt-icon, .skin-sync-pill.sync-on .sync-bolt-icon {
+  background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.18); color: #e4e4ec;
+}
+.sync-sub, .skin-sync-pill.sync-on .sync-sub { color: #e4e4ec; }
+.skin-slot-card.active { border-color: rgba(255, 255, 255, 0.22); box-shadow: none; }
+.equipped-pill { background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.20); color: #e8e8ee; }
+
+/* ---------- Server screen: black like the Play screen ---------- */
+.srv-hero-frame { background: #030303 !important; }
+.srv-empty-ico { border-color: rgba(255, 255, 255, 0.14); }
+.mm-logo { border-color: rgba(255, 255, 255, 0.14); box-shadow: none; }
+.mm-panel { box-shadow: 0 30px 80px rgba(0, 0, 0, 0.9); }
+.mm-item:hover, .mm-item:focus-visible { border-color: var(--opt-hover-border); }
+.preset-icon-box, .preset-badge { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.16); color: #e4e4ec; }
+.engine-preset-card.selected .preset-icon-box { background: #e8e8ee; border-color: #fff; color: #000; box-shadow: none; }
+
+/* ===== Compact version picker (Create server) ===== */
+.vsel { position: relative; }
+.vsel-native { display: none !important; }
+.vsel-btn { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border-subtle); background: var(--bg-input); color: var(--text-primary); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.vsel-btn:disabled { opacity: .55; cursor: not-allowed; }
+.vsel.open .vsel-btn, .vsel-btn:focus-visible { border-color: var(--crimson-500); box-shadow: 0 0 0 2px rgba(225, 29, 72, 0.2); outline: none; }
+.vsel-btn svg { width: 14px; height: 14px; flex: none; opacity: .7; transition: transform .15s; }
+.vsel.open .vsel-btn svg { transform: rotate(180deg); }
+.vsel-menu { position: absolute; top: calc(100% + 6px); left: 0; width: 180px; max-width: 100%; z-index: 60; display: none; max-height: 168px; overflow-y: auto; padding: 4px; border-radius: 10px; background: #0b0b0b; border: 1px solid rgba(255,255,255,0.10); box-shadow: 0 14px 32px rgba(0,0,0,0.75); }
+.vsel.open .vsel-menu { display: block; }
+.vsel-opt { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: 7px; font-size: 12px; line-height: 1.2; color: var(--text-secondary); cursor: pointer; }
+.vsel-opt:hover { background: rgba(255,255,255,0.06); color: #fff; }
+.vsel-opt.active { background: rgba(225, 29, 72, 0.18); color: #fff; }
+.vsel-opt.active::after { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--crimson-500); }
+.vsel-menu::-webkit-scrollbar { width: 6px; }
+.vsel-menu::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 3px; }
+
+/* ===== Game running: launcher goes idle so Minecraft gets all the GPU ===== */
+body.game-running *, body.game-running *::before, body.game-running *::after {
+  animation: none !important;
+  transition: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}

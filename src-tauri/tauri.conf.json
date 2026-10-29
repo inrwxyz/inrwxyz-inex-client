@@ -1,5 +1,4 @@
 {
-  "$schema": "https://schema.tauri.app/config/2",
   "productName": "INEX CLIENT",
   "mainBinaryName": "INEX CLIENT",
   "version": "../package.json",
@@ -22,7 +21,8 @@
         "center": true,
         "decorations": false,
         "visible": false,
-        "backgroundColor": "#050508"
+        "backgroundColor": "#050508",
+        "dragDropEnabled": false
       }
     ]
   },

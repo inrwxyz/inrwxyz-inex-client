@@ -1,18 +1,44 @@
+# Dependencies / build output
 node_modules/
 dist/
 dist-ui/
 release/
 *.log
-.env
-*.exe
 *.blockmap
+*.exe
+*.zip
 
-# Tauri / Rust
+# Secrets / keys
+.env
+.env.*
+*.key
+*.pem
+*.pfx
+*.p12
+auth_tokens.json
+access-last.json
+
+# Tauri / Rust (generated)
 src-tauri/target/
 src-tauri/gen/
 src-tauri/backend/
 src-tauri/binaries/
-*.key
-# temporary patch files
+
+# Java agent build output
+agent-src/out/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.bak
 *.bak-before-*
 apply-*.js
+# Build output of agent-src/build-agent.js (the used copy is src/main/agent/)
+agent-src/*.jar
+
+# Build output of agent-src/build-agent.js (the used copy is src/main/agent/)
+agent-src/*.jar

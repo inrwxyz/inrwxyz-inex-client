@@ -6,7 +6,6 @@ contextBridge.exposeInMainWorld('inexAPI', {
   closeWindow: () => ipcRenderer.invoke('window:close'),
   writeClipboardText: text => ipcRenderer.invoke('clipboard:writeText', text),
   openExternal: url => ipcRenderer.invoke('shell:openExternal', url),
-  getDiscordWidget: () => ipcRenderer.invoke('discord:widget'),
 
   getBootstrapState: () => ipcRenderer.invoke('get-bootstrap-state'),
 
@@ -103,10 +102,6 @@ contextBridge.exposeInMainWorld('inexAPI', {
   accessCreate: serverId => ipcRenderer.invoke('access:create', serverId),
   accessCancel: () => ipcRenderer.invoke('access:cancel'),
   accessDisconnect: () => ipcRenderer.invoke('access:disconnect'),
-  accessCheck: code => ipcRenderer.invoke('access:check', code),
-  p2pSignalSend: (role, code, sid, data) => ipcRenderer.invoke('p2p:signalSend', role, code, sid, data),
-  p2pSignalPoll: (role, code, sid) => ipcRenderer.invoke('p2p:signalPoll', role, code, sid),
-  p2pEnd: (role, code, sid) => ipcRenderer.invoke('p2p:end', role, code, sid),
   p2pClaim: (code, sid) => ipcRenderer.invoke('p2p:claim', code, sid),
   p2pHostOpened: code => ipcRenderer.invoke('p2p:hostOpened', code),
   p2pHostClosed: code => ipcRenderer.invoke('p2p:hostClosed', code),

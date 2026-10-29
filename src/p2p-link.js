@@ -1,17 +1,26 @@
 /**
  * INEX CLIENT — P2P Link (WebRTC DataChannel) for one-time-code Server Access
- * Firebase is used ONLY for the WebRTC handshake (offer / answer / ICE) under sessions/{CODE}.
- * As soon as the DataChannel is open, every command / log / file goes directly peer-to-peer.
+ * NO server is involved. The WebRTC handshake is done by copy-paste:
+ *   1) host   -> friend : "host code"  (made when the host presses Generate)
+ *   2) friend -> host   : "reply code" (made when the friend pastes the host code)
+ * As soon as the host pastes the reply code, the DataChannel opens and everything goes directly peer-to-peer.
  *
- * window.inexP2P.connect(code)          joiner: use the code + open the P2P link (one attempt at a time)
- * window.inexP2P.call(code, method, a)  joiner: run a command on the host over P2P
- * window.inexP2P.close(code)            joiner: close the editor link
- * window.inexP2P.onState(cb)            cb({ hostUid: code, state })  state: connecting | open | closed
- * Host side is automatic (listens for the "p2p-expect" event when the host generates a code).
+ * Friend side
+ *   inexP2P.parseOffer(text)            validate a host code -> { code }
+ *   inexP2P.connect(text, onReply)      onReply(replyCode) is called when the reply code is ready; resolves when the link is open
+ *   inexP2P.abort()                     cancel a connect that is still waiting
+ *   inexP2P.call(code, method, args)    run a command on the host over P2P
+ *   inexP2P.close(code)                 close the editor link
+ *   inexP2P.onState(cb)                 cb({ hostUid: code, state })  state: connecting | open | closed
+ * Host side
+ *   inexP2P.getOffer(code)              { offerCode, error } once the host code is ready (null before)
+ *   inexP2P.acceptAnswer(code, text)    host pastes the friend's reply code
+ *   inexP2P.onHost(cb)                  cb({ code, kind })  kind: offer | error | open
  */
 (function () {
   'use strict';
   const api = window.inexAPI || {};
+  const C = window.inexCodec;
   const RTC_CFG = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
@@ -21,9 +30,12 @@
   };
   const CHUNK = 12000;
   const CALL_TIMEOUT_MS = 20000;
-  const POLL_MS = 600;            // while a handshake is running
-  const WAIT_POLL_MS = 1000;      // host waiting for somebody to use the code
-  const HANDSHAKE_MS = 25000;
+  const GATHER_MAX_MS = 6000;      // max time to find our public address
+  const GATHER_EXTRA_MS = 700;     // after the first public address, wait a little for the others
+  const HANDSHAKE_MS = 30000;      // host: after pasting the reply, the link must open within this
+  const JOIN_WAIT_MS = 4 * 60 * 1000; // friend: how long to wait for the host to paste the reply
+  const FAILED_GRACE_MS = 45000;   // friend: ICE "failed" before the host pasted is not fatal for this long
+  const OFFER_TTL_MIN = 15;        // must match CODE_TTL_MS in codeAccess.js
   const DISCONNECT_GRACE_MS = 12000;
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const rid = () => (Date.now().toString(36) + Math.random().toString(36).slice(2, 8)).toLowerCase();
@@ -32,8 +44,11 @@
   const friendLinks = new Map(); // code -> link   (I joined with a code)
   const hostLinks = new Map();   // code -> link   (my own code)
   const listeners = new Set();
+  const hostListeners = new Set();
   const emit = (code, state) => listeners.forEach(cb => { try { cb({ hostUid: code, state }); } catch (_) {} });
+  const hostEvt = (code, kind) => hostListeners.forEach(cb => { try { cb({ code, kind }); } catch (_) {} });
   let connecting = false;
+  let currentJoin = null;
 
   /* ---------- framing: JSON message -> chunks -> JSON message ---------- */
   async function sendMsg(link, obj) {
@@ -66,23 +81,38 @@
     }
   }
 
-  function newPc(link, onIce) {
+  function newLink(extra) {
+    return Object.assign({ pending: new Map(), buf: new Map(), dead: false, lost: false, opened: false }, extra);
+  }
+
+  function newPc(link) {
     const pc = new RTCPeerConnection(RTC_CFG);
     link.pc = pc;
-    link.pendingIce = [];
-    link.remoteSet = false;
-    pc.onicecandidate = e => { if (e.candidate) onIce(e.candidate.toJSON ? e.candidate.toJSON() : e.candidate); };
     return pc;
   }
 
-  async function addIce(link, cand) {
-    if (!link.remoteSet) { link.pendingIce.push(cand); return; }
-    try { await link.pc.addIceCandidate(cand); } catch (_) {}
-  }
-  async function flushIce(link) {
-    link.remoteSet = true;
-    const list = link.pendingIce.splice(0);
-    for (const c of list) { try { await link.pc.addIceCandidate(c); } catch (_) {} }
+  // Wait until our public address is known (ICE gathering). No trickle: everything goes into the code.
+  function waitGathered(pc) {
+    return new Promise(resolve => {
+      let done = false, soft = null;
+      const fin = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(hard); clearTimeout(soft);
+        pc.removeEventListener('icegatheringstatechange', chk);
+        pc.removeEventListener('icecandidate', onc);
+        resolve();
+      };
+      const chk = () => { if (pc.iceGatheringState === 'complete') fin(); };
+      const onc = e => {
+        if (!e.candidate) { fin(); return; }
+        if (!soft && / typ srflx /.test(e.candidate.candidate || '')) soft = setTimeout(fin, GATHER_EXTRA_MS);
+      };
+      const hard = setTimeout(fin, GATHER_MAX_MS);
+      pc.addEventListener('icegatheringstatechange', chk);
+      pc.addEventListener('icecandidate', onc);
+      chk();
+    });
   }
 
   function destroy(link) {
@@ -94,46 +124,18 @@
     link.pending.clear();
   }
 
-  /* ================= JOINER SIDE (uses a code) ================= */
-  async function handshakeAsJoiner(link) {
-    const { code, sid } = link;
-    const pc = newPc(link, c => { api.p2pSignalSend('friend', code, sid, JSON.stringify({ k: 'ice', c })).catch(() => {}); });
-    const dc = pc.createDataChannel('inex', { ordered: true });
-    link.dc = dc;
-    let opened = false;
-    const openP = new Promise(resolve => { dc.onopen = () => { opened = true; resolve(); }; });
-    dc.onmessage = e => onRaw(link, e.data, msg => handleJoinerMsg(link, msg));
-    dc.onclose = () => { if (!link.dead) linkLost(link); };
-    pc.onconnectionstatechange = () => {
-      if (['failed', 'closed'].includes(pc.connectionState) && !link.dead) linkLost(link);
-    };
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    await api.p2pSignalSend('friend', code, sid, JSON.stringify({ k: 'offer', sdp: pc.localDescription.sdp }));
-
-    const deadline = Date.now() + HANDSHAKE_MS;
-    while (!opened && !link.dead && Date.now() < deadline) {
-      let list = [];
-      try { list = await api.p2pSignalPoll('friend', code, sid); } catch (_) {}
-      for (const it of list) {
-        let m; try { m = JSON.parse(it.d); } catch (_) { continue; }
-        if (m.k === 'busy') throw new Error('Someone else used this code first. Ask the host for a new code.');
-        if (m.k === 'answer' && !link.remoteSet) {
-          await pc.setRemoteDescription({ type: 'answer', sdp: m.sdp });
-          await flushIce(link);
-        } else if (m.k === 'ice' && m.c) await addIce(link, m.c);
-      }
-      if (opened) break;
-      await Promise.race([openP, sleep(POLL_MS)]);
-    }
-    if (!opened) throw new Error('Could not connect. The code may be used or expired, or the host is offline / network blocked.');
+  /* ================= FRIEND SIDE (pastes the host code) ================= */
+  function parseOffer(text) {
+    const dec = C.decode(text);
+    if (dec.type !== 'offer') throw new Error('That is a reply code. Paste the code the host gave you.');
+    const age = C.nowMinutes() - dec.minutes;
+    if (age > OFFER_TTL_MIN + 2 || age < -10) throw new Error('This code has expired. Ask the host for a new one.');
+    return { code: dec.code, dec };
   }
 
   function handleJoinerMsg(link, msg) {
     if (!msg) return;
     if (msg.t === 'bye') { // host disconnected us
-      link.keep = false;
       linkLost(link);
       return;
     }
@@ -156,33 +158,76 @@
     emit(link.code, 'closed');
   }
 
-  async function connect(codeIn) {
+  async function connect(offerText, onReply) {
     if (connecting) throw new Error('Already connecting. Please wait.');
-    const code = normCode(codeIn);
+    if (!C) throw new Error('P2P module did not load (p2p-codec.js).');
     connecting = true;
     let link = null;
     try {
+      const { code, dec } = parseOffer(offerText);
       const old = friendLinks.get(code);
       if (old && !old.dead && !old.lost && old.dc && old.dc.readyState === 'open') throw new Error('You are already connected with this code.');
       if (old) { destroy(old); friendLinks.delete(code); }
       emit(code, 'connecting');
-      await api.accessCheck(code); // throws a friendly error if the code is wrong / used / expired
-      link = { code, sid: rid(), pending: new Map(), buf: new Map(), dead: false, lost: false };
+      link = newLink({ code, sid: rid(), failedAt: 0, aborted: false });
       friendLinks.set(code, link);
-      await handshakeAsJoiner(link);
+      currentJoin = link;
+
+      const pc = newPc(link);
+      pc.ondatachannel = e => {
+        const dc = e.channel;
+        link.dc = dc;
+        dc.onopen = () => { link.opened = true; };
+        dc.onmessage = ev => onRaw(link, ev.data, msg => handleJoinerMsg(link, msg));
+        dc.onclose = () => { if (!link.dead && link.opened) linkLost(link); };
+      };
+      pc.onconnectionstatechange = () => {
+        const st = pc.connectionState;
+        if (link.dead) return;
+        if (st === 'connected') { link.failedAt = 0; return; }
+        if (['failed', 'closed'].includes(st)) {
+          if (link.opened) linkLost(link);
+          else if (!link.failedAt) link.failedAt = Date.now(); // the host may not have pasted the reply yet
+        }
+      };
+
+      const gathered = waitGathered(pc);
+      await pc.setRemoteDescription({ type: 'offer', sdp: C.toSdp(dec.info, 'offer') });
+      await pc.setLocalDescription(await pc.createAnswer());
+      await gathered;
+      if (link.dead) throw new Error(link.aborted ? 'Cancelled.' : 'Connection closed.');
+      const reply = C.encode({ type: 'answer', code, info: C.parseSdp(pc.localDescription.sdp) });
+      if (typeof onReply === 'function') onReply(reply);
+
+      const deadline = Date.now() + JOIN_WAIT_MS;
+      while (!link.opened && !link.dead && Date.now() < deadline) {
+        if (link.failedAt && Date.now() - link.failedAt > FAILED_GRACE_MS) {
+          throw new Error('Could not connect. A firewall / router may block direct connections, or the host used an old code. Ask the host for a new code.');
+        }
+        await sleep(250);
+      }
+      if (link.dead) throw new Error(link.aborted ? 'Cancelled.' : 'Connection closed.');
+      if (!link.opened) throw new Error('The host did not paste your reply in time. Ask the host for a new code.');
       emit(code, 'open');
       return true;
     } catch (e) {
       if (link) {
         destroy(link);
-        friendLinks.delete(code);
-        api.p2pEnd('friend', code, link.sid).catch(() => {});
+        friendLinks.delete(link.code);
+        emit(link.code, 'closed');
       }
-      emit(code, 'closed');
       throw e;
     } finally {
       connecting = false;
+      currentJoin = null;
     }
+  }
+
+  function abort() {
+    const l = currentJoin;
+    if (!l) return;
+    l.aborted = true;
+    destroy(l);
   }
 
   function call(code, method, args) {
@@ -206,7 +251,6 @@
     try { await sendMsg(link, { t: 'bye' }); } catch (_) {}
     destroy(link);
     friendLinks.delete(code);
-    api.p2pEnd('friend', code, link.sid).catch(() => {});
     emit(code, 'closed');
   }
 
@@ -218,73 +262,75 @@
     api.p2pHostClosed(code).catch(() => {});   // frees the "someone is connected" lock
   }
 
-  async function waitForJoiner(code, exp) {
+  // Called when the host generates a code: build the WebRTC offer and turn it into the short host code.
+  async function prepareHost(code) {
     const old = hostLinks.get(code);
     if (old) { destroy(old); hostLinks.delete(code); }
-    const link = { uid: code, pending: new Map(), buf: new Map(), dead: false, sid: null };
+    const link = newLink({ uid: code, sid: null, offerCode: null, error: null, accepted: false });
     hostLinks.set(code, link);
-    let locked = null;
-    let lockedAt = 0;
-    let opened = false;
-    const early = new Map(); // sid -> [ice] that arrived before the offer
-    const busySent = new Set();
-
-    const pc = newPc(link, c => {
-      if (link.sid) api.p2pSignalSend('host', code, link.sid, JSON.stringify({ k: 'ice', c })).catch(() => {});
-    });
-    pc.ondatachannel = e => {
-      const dc = e.channel;
+    try {
+      if (!C) throw new Error('P2P module did not load (p2p-codec.js).');
+      const pc = newPc(link);
+      const dc = pc.createDataChannel('inex', { ordered: true });
       link.dc = dc;
-      dc.onopen = () => { opened = true; api.p2pHostOpened(code).catch(() => {}); };
+      dc.onopen = () => { link.opened = true; api.p2pHostOpened(code).catch(() => {}); hostEvt(code, 'open'); };
       dc.onmessage = ev => onRaw(link, ev.data, msg => handleHostMsg(code, link, msg));
       dc.onclose = () => hostGone(code, link);
-    };
-    pc.onconnectionstatechange = () => {
-      const st = pc.connectionState;
-      if (['failed', 'closed'].includes(st)) { hostGone(code, link); return; }
-      if (st === 'disconnected') {
-        if (!link.discTimer) link.discTimer = setTimeout(() => { if (pc.connectionState === 'disconnected') hostGone(code, link); }, DISCONNECT_GRACE_MS);
-      } else if (link.discTimer) { clearTimeout(link.discTimer); link.discTimer = null; }
-    };
+      pc.onconnectionstatechange = () => {
+        const st = pc.connectionState;
+        if (!link.accepted) return; // nothing to lose before the friend's reply is in
+        if (['failed', 'closed'].includes(st)) { hostGone(code, link); return; }
+        if (st === 'disconnected') {
+          if (!link.discTimer) link.discTimer = setTimeout(() => { if (pc.connectionState === 'disconnected') hostGone(code, link); }, DISCONNECT_GRACE_MS);
+        } else if (link.discTimer) { clearTimeout(link.discTimer); link.discTimer = null; }
+      };
+      const gathered = waitGathered(pc);
+      await pc.setLocalDescription(await pc.createOffer());
+      await gathered;
+      if (link.dead) return;
+      link.offerCode = C.encode({ type: 'offer', code, info: C.parseSdp(pc.localDescription.sdp) });
+      hostEvt(code, 'offer');
+    } catch (e) {
+      if (link.dead) return;
+      link.error = String((e && e.message) || e);
+      try { if (link.pc) link.pc.close(); } catch (_) {}
+      hostEvt(code, 'error');
+    }
+  }
 
-    while (!link.dead && !opened) {
-      const now = Date.now();
-      if (!locked && exp && now > exp + 3000) break;                          // code expired unused
-      if (locked && now > lockedAt + HANDSHAKE_MS + 10000) break;             // joiner never finished
-      let list = [];
-      try { list = await api.p2pSignalPoll('host', code, null); } catch (_) {}
-      for (const it of list) {
-        if (link.dead) break;
-        let m; try { m = JSON.parse(it.d); } catch (_) { continue; }
-        if (!locked) {
-          if (m.k === 'offer') {
-            try { await api.p2pClaim(code, it.sid); } catch (_) { link.dead = true; break; } // first offer wins; code dies now
-            locked = it.sid; link.sid = it.sid; lockedAt = Date.now();
-            (early.get(it.sid) || []).forEach(c => link.pendingIce.push(c));
-            await pc.setRemoteDescription({ type: 'offer', sdp: m.sdp });
-            await flushIce(link);
-            const ans = await pc.createAnswer();
-            await pc.setLocalDescription(ans);
-            await api.p2pSignalSend('host', code, link.sid, JSON.stringify({ k: 'answer', sdp: pc.localDescription.sdp }));
-          } else if (m.k === 'ice' && m.c) {
-            if (!early.has(it.sid)) early.set(it.sid, []);
-            early.get(it.sid).push(m.c);
-          }
-        } else if (it.sid === locked && m.k === 'ice' && m.c) {
-          await addIce(link, m.c);
-        } else if (it.sid !== locked && m.k === 'offer' && !busySent.has(it.sid)) {
-          busySent.add(it.sid); // somebody else was too late: tell them right away instead of letting them wait
-          api.p2pSignalSend('host', code, it.sid, '{"k":"busy"}').catch(() => {});
-        }
-      }
-      if (link.dead || opened) break;
-      await sleep(locked ? POLL_MS : WAIT_POLL_MS);
+  function getOffer(code) {
+    const l = hostLinks.get(normCode(code));
+    if (!l || l.dead) return null;
+    if (l.error) return { offerCode: null, error: l.error };
+    return l.offerCode ? { offerCode: l.offerCode, error: null } : null;
+  }
+
+  // The host pasted the friend's reply code.
+  async function acceptAnswer(codeIn, text) {
+    const code = normCode(codeIn);
+    const link = hostLinks.get(code);
+    if (!link || link.dead || !link.offerCode) throw new Error('This code is not active. Generate a new one.');
+    if (link.accepted) throw new Error('A reply was already used for this code.');
+    const dec = C.decode(text);
+    if (dec.type !== 'answer') throw new Error('That is the host code. Paste the REPLY code your friend sent back to you.');
+    if (dec.code !== code) throw new Error('This reply belongs to a different code. Ask your friend to use your latest code.');
+    link.accepted = true;
+    link.sid = rid();
+    try { await api.p2pClaim(code, link.sid); } // the code dies now: nobody else can use it
+    catch (e) { link.accepted = false; throw e; }
+    try {
+      await link.pc.setRemoteDescription({ type: 'answer', sdp: C.toSdp(dec.info, 'answer') });
+    } catch (_) {
+      hostGone(code, link);
+      throw new Error('That reply code could not be used. Generate a new code and try again.');
     }
-    if (!opened && !link.dead) {
-      destroy(link);
-      if (hostLinks.get(code) === link) hostLinks.delete(code);
-      if (locked) api.p2pHostClosed(code).catch(() => {});
+    const deadline = Date.now() + HANDSHAKE_MS;
+    while (!link.opened && !link.dead && Date.now() < deadline) await sleep(250);
+    if (!link.opened) {
+      hostGone(code, link);
+      throw new Error('Could not connect. A firewall / router may block direct connections, or the reply was too late. Generate a new code and try again.');
     }
+    return true;
   }
 
   async function handleHostMsg(code, link, msg) {
@@ -303,7 +349,7 @@
     try { await sendMsg(link, out); } catch (_) {}
   }
 
-  if (api.onP2PExpect) api.onP2PExpect(d => { if (d && d.code) waitForJoiner(d.code, d.exp).catch(() => {}); });
+  if (api.onP2PExpect) api.onP2PExpect(d => { if (d && d.code) prepareHost(d.code).catch(() => {}); });
   if (api.onP2PKick) api.onP2PKick(async d => {
     const l = d && hostLinks.get(d.code);
     if (!l) return;
@@ -316,10 +362,15 @@
   });
 
   window.inexP2P = {
+    parseOffer: t => { const r = parseOffer(t); return { code: r.code }; },
     connect,
+    abort,
     call,
     close,
+    getOffer,
+    acceptAnswer,
     isOpen: code => { const l = friendLinks.get(code); return Boolean(l && l.dc && l.dc.readyState === 'open'); },
-    onState: cb => { listeners.add(cb); return () => listeners.delete(cb); }
+    onState: cb => { listeners.add(cb); return () => listeners.delete(cb); },
+    onHost: cb => { hostListeners.add(cb); return () => hostListeners.delete(cb); }
   };
 })();

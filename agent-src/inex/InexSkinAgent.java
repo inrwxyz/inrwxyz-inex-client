@@ -10,12 +10,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.net.HttpURLConnection;
-import java.net.URI;
-import java.net.URL;
-import java.net.URLEncoder;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -25,17 +20,12 @@ import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
- * INEX per-player skin agent (Max FPS Optimized with Reflection Caching & Offline Self-Skin Mode).
+ * INEX skin agent: 100% offline. Applies ONLY the local player's own skin (read from a local PNG).
+ * No network, no cloud, no resource pack. Other players always keep their normal skins.
  */
 public class InexSkinAgent {
-    static final String DB = System.getProperty("inex.skin.db",
-            "https://inex-cosmetics-default-rtdb.firebaseio.com/cosmetics/");
-    static volatile boolean ONLINE_SYNC = !"false".equalsIgnoreCase(System.getProperty("inex.skin.online", "true"));
-    static final String SETTINGS_FILE = System.getProperty("inex.skin.settingsFile", "").trim();
     static final String SELF_USER = System.getProperty("inex.skin.self", "").toLowerCase(Locale.ROOT).trim();
     static final String SELF_FILE = System.getProperty("inex.skin.selfFile", "").trim();
     static final String SELF_MODEL = System.getProperty("inex.skin.selfModel", "slim").trim();
@@ -69,7 +59,7 @@ public class InexSkinAgent {
         }, "inex-skin-agent");
         t.setDaemon(true);
         t.start();
-        log("agent started | onlineSync=" + ONLINE_SYNC + " | self=" + SELF_USER);
+        log("agent started (offline, self-skin only) | self=" + SELF_USER);
     }
 
     static void preloadSelfLocalSkin() {
@@ -98,34 +88,12 @@ public class InexSkinAgent {
     static void loop() {
         while (true) {
             try {
-                refreshOnlineSync();
                 tick();
             } catch (Throwable e) {
                 logOnce("tick error: " + e);
             }
             try { Thread.sleep(2000L); } catch (InterruptedException e) { return; }
         }
-    }
-
-    static void refreshOnlineSync() throws Exception {
-        if (SETTINGS_FILE.isEmpty()) return;
-        File file = new File(SETTINGS_FILE);
-        if (!file.isFile()) return;
-        String value = new String(readAllBytes(new FileInputStream(file)), "UTF-8").trim();
-        if (!"true".equalsIgnoreCase(value) && !"false".equalsIgnoreCase(value)) return;
-        boolean enabled = Boolean.parseBoolean(value);
-        if (ONLINE_SYNC == enabled) return;
-        ONLINE_SYNC = enabled;
-        if (!enabled) {
-            for (Entry entry : CACHE.values()) {
-                if (entry.local) continue;
-                entry.png = null;
-                entry.model = null;
-                entry.updatedAt = 0L;
-                entry.fetchedAt = 0L;
-            }
-        }
-        log("online sync " + (enabled ? "enabled" : "disabled") + " by launcher setting");
     }
 
     static boolean init() {
@@ -171,23 +139,16 @@ public class InexSkinAgent {
     }
 
     static void handle(final Object mc, final Object pi) throws Exception {
+        if (SELF_USER.isEmpty()) return;
         String name = profileName(call(pi, "getProfile"));
         if (name == null) return;
         final String key = name.toLowerCase(Locale.ROOT);
-
-        // When Online Skin Sync is OFF: ignore all other players (they stay Steve/Alex) & only apply local self-skin!
-        if (!ONLINE_SYNC) {
-            if (!key.equals(SELF_USER)) {
-                if (!APPLIED.containsKey(pi)) return;
-            } else if (!CACHE.containsKey(SELF_USER)) {
-                preloadSelfLocalSkin();
-            }
-        } else {
-            maybeFetch(key);
-        }
+        // Only the local player's own skin is ever touched; every other player is left alone.
+        if (!key.equals(SELF_USER)) return;
+        if (!CACHE.containsKey(SELF_USER)) preloadSelfLocalSkin();
 
         final Entry e = CACHE.get(key);
-        final boolean applySkin = e != null && e.png != null && (ONLINE_SYNC || e.local);
+        final boolean applySkin = e != null && e.png != null;
         final String skinStamp = applySkin ? key + ":" + e.updatedAt : null;
         final boolean needsSkin = applySkin && !skinStamp.equals(APPLIED.get(pi));
         final boolean needsSkinRestore = !applySkin && APPLIED.containsKey(pi);
@@ -200,7 +161,7 @@ public class InexSkinAgent {
                 try {
                     if (needsSkin) {
                         apply(mc, pi, key, e);
-                        log("skin applied: " + key + (ONLINE_SYNC ? " (online)" : " (local-only)"));
+                        log("skin applied: " + key + " (local-only)");
                     } else if (needsSkinRestore) {
                         restoreSkin(pi);
                         log("skin cleared: " + key);
@@ -248,55 +209,6 @@ public class InexSkinAgent {
                 || (parameter == char.class && arg instanceof Character);
     }
 
-    static void maybeFetch(final String key) {
-        Entry old = CACHE.get(key);
-        long now = System.currentTimeMillis();
-        if (old != null) {
-            if (old.fetching) return;
-            if (now - old.fetchedAt < (old.png == null ? 30000L : 90000L)) return;
-        }
-        final Entry en = old != null ? old : new Entry();
-        en.fetching = true;
-        en.fetchedAt = now;
-        CACHE.put(key, en);
-        Thread t = new Thread(new Runnable() {
-            public void run() {
-                try { fetch(key, en); }
-                catch (Throwable ex) { logOnce("firebase fetch failed (" + key + "): " + ex); }
-                finally { en.fetchedAt = System.currentTimeMillis(); en.fetching = false; }
-            }
-        }, "inex-skin-fetch");
-        t.setDaemon(true);
-        t.start();
-    }
-
-    static void fetch(String key, Entry en) throws Exception {
-        String base = DB.endsWith("/") ? DB : (DB + "/");
-        URL url = URI.create(base + URLEncoder.encode(key, "UTF-8") + ".json").toURL();
-        HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setConnectTimeout(5000);
-        c.setReadTimeout(8000);
-        c.setRequestProperty("User-Agent", "INEX-Skin-Agent");
-        if (c.getResponseCode() != 200) return;
-        String body = new String(readAllBytes(c.getInputStream()), "UTF-8");
-        if (body.trim().equals("null")) {
-            en.png = null;
-            en.model = null;
-            en.updatedAt = 0L;
-            return;
-        }
-        String b64 = jsonString(body, "skin");
-        byte[] png = b64 == null || b64.isEmpty() ? null : Base64.getDecoder().decode(b64);
-        String model = jsonString(body, "model");
-        String upd = jsonRaw(body, "updatedAt");
-        long u = 1L;
-        try { if (upd != null) u = Long.parseLong(upd.trim()); } catch (Exception ignore) {}
-        en.model = model;
-        en.updatedAt = u;
-        en.png = png;
-        en.local = false;
-    }
-
     static byte[] readAllBytes(InputStream in) throws Exception {
         try {
             ByteArrayOutputStream bo = new ByteArrayOutputStream();
@@ -305,33 +217,6 @@ public class InexSkinAgent {
             while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
             return bo.toByteArray();
         } finally { in.close(); }
-    }
-
-    static String jsonString(String json, String field) {
-        Matcher m = Pattern.compile("\"" + field + "\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").matcher(json);
-        return m.find() ? unescape(m.group(1)) : null;
-    }
-
-    static String jsonRaw(String json, String field) {
-        Matcher m = Pattern.compile("\"" + field + "\"\\s*:\\s*(-?\\d+)").matcher(json);
-        return m.find() ? m.group(1) : null;
-    }
-
-    static String unescape(String s) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < s.length(); i++) {
-            char ch = s.charAt(i);
-            if (ch != '\\' || i + 1 >= s.length()) { sb.append(ch); continue; }
-            char n = s.charAt(++i);
-            if (n == 'u' && i + 4 < s.length()) {
-                sb.append((char) Integer.parseInt(s.substring(i + 1, i + 5), 16));
-                i += 4;
-            } else if (n == 'n') sb.append('\n');
-            else if (n == 'r') sb.append('\r');
-            else if (n == 't') sb.append('\t');
-            else sb.append(n);
-        }
-        return sb.toString();
     }
 
     static void apply(Object mc, Object pi, String key, Entry e) throws Exception {

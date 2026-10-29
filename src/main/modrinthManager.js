@@ -4,6 +4,18 @@ const crypto = require('crypto');
 const { parseZipBuffer, validateSafeRelativePath } = require('./zipUtils');
 
 const MODRINTH_API_BASE = 'https://api.modrinth.com/v2';
+const UA = { 'User-Agent': 'INEX-Client-Launcher/1.0.0 (windows)' };
+
+// Performance Pack (Fabric): only the mod NAMES are fixed. Which Minecraft versions exist is always asked from Modrinth.
+const PERF_PACK_MODS = [
+  { slug: 'sodium', title: 'Sodium', fileHints: ['sodium'] },
+  { slug: 'lithium', title: 'Lithium', fileHints: ['lithium'] },
+  { slug: 'krypton', title: 'Krypton', fileHints: ['krypton'] },
+  { slug: 'ferrite-core', title: 'FerriteCore', fileHints: ['ferritecore', 'ferrite-core'] },
+  { slug: 'immediatelyfast', title: 'ImmediatelyFast', fileHints: ['immediatelyfast'] }
+];
+const PERF_PACK_FILE = 'inex-perfpack.json';
+const PERF_RETRY_MS = 12 * 60 * 60 * 1000; // retry mods that were not available yet at most every 12h
 
 // High-reliability offline fallback catalog if Modrinth is unreachable when offline
 const FALLBACK_MODRINTH_PROJECTS = {
@@ -192,6 +204,7 @@ class ModrinthManager {
   constructor({ settingsManager, profileManager }) {
     this.settingsManager = settingsManager;
     this.profileManager = profileManager;
+    this._fetch = (...args) => fetch(...args); // overridable (tests)
   }
 
   _getContentFolderForType(projectType) {
@@ -596,6 +609,189 @@ class ModrinthManager {
     };
   }
 
+
+  // ---------------------------------------------------------------------------------------------
+  // Performance Pack (Fabric only). Fixed list of mod names; versions are resolved live from Modrinth
+  // for the profile's exact Minecraft version, so new Minecraft versions need no code change.
+  // ---------------------------------------------------------------------------------------------
+  _perfStatePath(profile) { return path.join(profile.gameDir, PERF_PACK_FILE); }
+
+  _readPerfState(profile) {
+    try { return JSON.parse(fs.readFileSync(this._perfStatePath(profile), 'utf8')); } catch (_) { return null; }
+  }
+
+  _writePerfState(profile, state) {
+    fs.mkdirSync(profile.gameDir, { recursive: true });
+    fs.writeFileSync(this._perfStatePath(profile), JSON.stringify(state, null, 2), 'utf8');
+  }
+
+  async _fetchJson(url, timeoutMs = 10000) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await this._fetch(url, { headers: UA, signal: ctrl.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } finally { clearTimeout(timer); }
+  }
+
+  // Newest build of `slugOrId` that STRICTLY lists this exact Minecraft version + fabric. Never a nearby version.
+  async _resolveStrictVersion(slugOrId, mcVersion, loader = 'fabric') {
+    const params = new URLSearchParams({
+      game_versions: JSON.stringify([mcVersion]),
+      loaders: JSON.stringify([loader])
+    });
+    const list = await this._fetchJson(`${MODRINTH_API_BASE}/project/${encodeURIComponent(slugOrId)}/version?${params}`);
+    if (!Array.isArray(list)) return null;
+    const ok = list.filter(v =>
+      Array.isArray(v.game_versions) && v.game_versions.includes(mcVersion) &&
+      Array.isArray(v.loaders) && v.loaders.includes(loader) &&
+      v.version_type !== 'alpha' &&
+      (v.files || []).some(f => f && f.url));
+    if (!ok.length) return null;
+    ok.sort((a, b) => new Date(b.date_published || 0) - new Date(a.date_published || 0));
+    return ok.find(v => v.version_type === 'release') || ok[0];
+  }
+
+  _isModAlreadyPresent(profile, projectId, hints) {
+    const lock = this._readContentLock(profile);
+    const dir = path.join(profile.gameDir, 'mods');
+    let files = [];
+    try { files = fs.readdirSync(dir).map(f => f.toLowerCase()); } catch (_) {}
+    for (const [fileName, meta] of Object.entries(lock.items || {})) {
+      if (projectId && meta.projectId === projectId && (files.includes(fileName.toLowerCase()) || files.includes(`${fileName.toLowerCase()}.disabled`))) return true;
+    }
+    return files.some(f => (hints || []).some(h => f.includes(h)));
+  }
+
+  async _downloadModFile(profile, version, meta) {
+    const file = (version.files || []).find(f => f.primary) || (version.files || [])[0];
+    if (!file || !file.url || !/\.jar$/i.test(file.filename || '')) throw new Error('no jar file');
+    const targetDir = path.join(profile.gameDir, 'mods');
+    fs.mkdirSync(targetDir, { recursive: true });
+    const dest = validateSafeRelativePath(path.basename(file.filename), targetDir);
+
+    const res = await this._fetch(file.url, { headers: UA });
+    if (!res.ok) throw new Error(`download HTTP ${res.status}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+
+    const h = file.hashes || {};
+    if (h.sha512) {
+      if (crypto.createHash('sha512').update(buf).digest('hex').toLowerCase() !== String(h.sha512).toLowerCase()) throw new Error('SHA512 mismatch');
+    } else if (h.sha1) {
+      if (crypto.createHash('sha1').update(buf).digest('hex').toLowerCase() !== String(h.sha1).toLowerCase()) throw new Error('SHA1 mismatch');
+    } else {
+      throw new Error('no hash from Modrinth, refusing to install');
+    }
+
+    fs.writeFileSync(`${dest}.part`, buf);
+    fs.renameSync(`${dest}.part`, dest);
+
+    const lock = this._readContentLock(profile);
+    lock.items = lock.items || {};
+    lock.items[path.basename(dest)] = {
+      projectId: version.project_id,
+      title: meta.title,
+      author: 'Modrinth',
+      versionId: version.id,
+      versionNumber: version.version_number,
+      mcVersion: profile.version,
+      iconUrl: '',
+      projectType: 'mod',
+      source: 'inex-performance-pack',
+      installedAt: new Date().toISOString()
+    };
+    this._writeContentLock(profile, lock);
+    return path.basename(dest);
+  }
+
+  // Installs one mod (plus its REQUIRED dependencies) or throws a short human-readable reason.
+  async _installPerfMod(profile, mod, depth = 0, seen = new Set()) {
+    const version = await this._resolveStrictVersion(mod.slug, profile.version, 'fabric');
+    if (!version) { const e = new Error(`not available for Minecraft ${profile.version} yet`); e.unavailable = true; throw e; }
+
+    const deps = (version.dependencies || []).filter(d => d && d.dependency_type === 'required' && d.project_id);
+    for (const d of deps) {
+      if (seen.has(d.project_id) || depth >= 2) continue;
+      seen.add(d.project_id);
+      if (this._isModAlreadyPresent(profile, d.project_id, [])) continue;
+      const depVersion = await this._resolveStrictVersion(d.project_id, profile.version, 'fabric');
+      if (!depVersion) { const e = new Error(`needs a library that is not available for Minecraft ${profile.version} yet`); e.unavailable = true; throw e; }
+      const depMeta = { title: depVersion.name || d.project_id };
+      if (!this._isModAlreadyPresent(profile, depVersion.project_id, [])) {
+        await this._downloadModFile(profile, depVersion, depMeta);
+      }
+    }
+    return await this._downloadModFile(profile, version, mod);
+  }
+
+  /**
+   * Installs the Performance Pack into a Fabric profile. Safe to call any time: never throws for "normal" problems
+   * (offline, mod not released yet) and never touches mods the user already has.
+   * `only` (array of slugs) restricts the run, used for retries.
+   */
+  async installPerformancePack(profileId, { onProgress = () => {}, only = null } = {}) {
+    const profile = this.profileManager.getProfileById(profileId);
+    if (!profile) throw new Error(`Profile not found: ${profileId}`);
+    if (profile.loader !== 'fabric') return { skipped: 'not-fabric', results: {} };
+
+    const prev = this._readPerfState(profile) || {};
+    const results = { ...(prev.results || {}) };
+    const list = PERF_PACK_MODS.filter(m => !only || only.includes(m.slug));
+    let done = 0;
+
+    for (const mod of list) {
+      onProgress({ profileId: profile.id, stage: 'Performance Pack', percent: Math.round((done / list.length) * 95), detail: `Checking ${mod.title} for Minecraft ${profile.version}...` });
+      try {
+        if (this._isModAlreadyPresent(profile, null, mod.fileHints)) {
+          results[mod.slug] = { status: 'present', at: new Date().toISOString() };
+        } else {
+          const fileName = await this._installPerfMod(profile, mod);
+          results[mod.slug] = { status: 'installed', file: fileName, at: new Date().toISOString() };
+        }
+      } catch (err) {
+        const code = String((err && err.cause && err.cause.code) || '');
+        const offline = !err.unavailable && (err.name === 'AbortError' || /fetch failed|network|ENOTFOUND|ECONN|EAI_AGAIN|ETIMEDOUT/i.test(`${err.message} ${code}`));
+        results[mod.slug] = { status: err.unavailable ? 'unavailable' : 'error', reason: offline ? 'offline' : String(err.message || err), at: new Date().toISOString() };
+        if (offline) { // no point asking the other mods when there is no connection
+          for (const rest of list.slice(done + 1)) if (!results[rest.slug]) results[rest.slug] = { status: 'error', reason: 'offline', at: new Date().toISOString() };
+          break;
+        }
+      }
+      done++;
+    }
+
+    const state = {
+      enabled: true,
+      mcVersion: profile.version,
+      lastTriedAt: Date.now(),
+      results
+    };
+    this._writePerfState(profile, state);
+
+    const installed = Object.values(results).filter(r => r.status === 'installed').length;
+    onProgress({ profileId: profile.id, stage: 'Installed', percent: 100, detail: `Performance Pack: ${installed} mod(s) installed` });
+    return { results, installed };
+  }
+
+  // Called on launch: quietly retries ONLY mods that were "unavailable"/"error" before (never ones the user removed).
+  async retryPerformancePack(profileId, { onLog = () => {} } = {}) {
+    const profile = this.profileManager.getProfileById(profileId);
+    if (!profile || profile.loader !== 'fabric') return null;
+    const state = this._readPerfState(profile);
+    if (!state || state.enabled === false) return null;
+    if (state.mcVersion && state.mcVersion !== profile.version) return null;
+    const pending = Object.entries(state.results || {}).filter(([, r]) => r.status === 'unavailable' || r.status === 'error').map(([slug]) => slug);
+    if (!pending.length) return null;
+    if (state.lastTriedAt && Date.now() - state.lastTriedAt < PERF_RETRY_MS) return null;
+
+    const out = await this.installPerformancePack(profileId, { only: pending });
+    for (const [slug, r] of Object.entries(out.results || {})) {
+      if (pending.includes(slug) && r.status === 'installed') onLog(`[INEX PERF] ${slug} is now available for Minecraft ${profile.version} and was installed.`);
+    }
+    return out;
+  }
+
   async installMrpackModpack({ profile, projectId, title, author, iconUrl, versionObj, primaryFile, onProgress }) {
     onProgress({
       profileId: profile.id,
@@ -804,4 +1000,4 @@ class ModrinthManager {
   }
 }
 
-module.exports = { ModrinthManager };
+module.exports = { ModrinthManager, PERF_PACK_MODS };

@@ -5,14 +5,14 @@
   'use strict';
 
   const PRESET_VERSION_CARDS = [
-    { id: '26.3', title: '26.3', subtitle: 'The Next Dimension', badge: 'LATEST', icon: 'star', bg: 'linear-gradient(155deg, #e11d48 0%, #4c0519 55%, #050508 100%)' },
-    { id: '26.2', title: '26.2', subtitle: 'Garden & Deep Trials', badge: 'STABLE', icon: 'layers', bg: 'linear-gradient(155deg, #9333ea 0%, #3b0764 55%, #09090d 100%)' },
-    { id: '1.21.4', title: '1.21.4', subtitle: 'The Garden Awakens', badge: 'LTS', icon: 'shield', bg: 'linear-gradient(155deg, #be123c 0%, #3f0d1c 55%, #111118 100%)' },
-    { id: '1.21.1', title: '1.21.1', subtitle: 'Tricky Trials', badge: 'POPULAR', icon: 'bolt', bg: 'linear-gradient(155deg, #9f1239 0%, #1e293b 60%, #0f172a 100%)' },
-    { id: '1.20.4', title: '1.20.4', subtitle: 'Trails & Tales', badge: 'MODDED', icon: 'hex', bg: 'linear-gradient(155deg, #881337 0%, #31102f 60%, #0d0d14 100%)' },
-    { id: '1.19.4', title: '1.19.4', subtitle: 'The Wild Update', badge: 'LEGACY', icon: 'compass', bg: 'linear-gradient(155deg, #065f46 0%, #111827 65%, #09090d 100%)' },
-    { id: '1.16.5', title: '1.16.5', subtitle: 'Nether Update', badge: 'FORGE', icon: 'flame', bg: 'linear-gradient(155deg, #7f1d1d 0%, #271212 65%, #09090d 100%)' },
-    { id: '1.8.9',  title: '1.8.9',  subtitle: 'Bountiful PvP', badge: 'PVP', icon: 'sword', bg: 'linear-gradient(155deg, #1d4ed8 0%, #172554 65%, #09090d 100%)' }
+    { id: '26.3', title: '26.3', subtitle: 'The Next Dimension', badge: 'LATEST', icon: 'star', bg: 'linear-gradient(155deg, #e11d48 0%, #4c0519 55%, #040404 100%)' },
+    { id: '26.2', title: '26.2', subtitle: 'Garden & Deep Trials', badge: 'STABLE', icon: 'layers', bg: 'linear-gradient(155deg, #9333ea 0%, #3b0764 55%, #060606 100%)' },
+    { id: '1.21.4', title: '1.21.4', subtitle: 'The Garden Awakens', badge: 'LTS', icon: 'shield', bg: 'linear-gradient(155deg, #be123c 0%, #3f0d1c 55%, #0c0c0c 100%)' },
+    { id: '1.21.1', title: '1.21.1', subtitle: 'Tricky Trials', badge: 'POPULAR', icon: 'bolt', bg: 'linear-gradient(155deg, #9f1239 0%, #1e293b 60%, #111111 100%)' },
+    { id: '1.20.4', title: '1.20.4', subtitle: 'Trails & Tales', badge: 'MODDED', icon: 'hex', bg: 'linear-gradient(155deg, #881337 0%, #31102f 60%, #0a0a0a 100%)' },
+    { id: '1.19.4', title: '1.19.4', subtitle: 'The Wild Update', badge: 'LEGACY', icon: 'compass', bg: 'linear-gradient(155deg, #065f46 0%, #111111 65%, #060606 100%)' },
+    { id: '1.16.5', title: '1.16.5', subtitle: 'Nether Update', badge: 'FORGE', icon: 'flame', bg: 'linear-gradient(155deg, #7f1d1d 0%, #101010 65%, #060606 100%)' },
+    { id: '1.8.9',  title: '1.8.9',  subtitle: 'Bountiful PvP', badge: 'PVP', icon: 'sword', bg: 'linear-gradient(155deg, #1d4ed8 0%, #172554 65%, #060606 100%)' }
   ];
 
   const api = window.inexAPI;
@@ -169,6 +169,8 @@
   function appendConsoleLog(line, level = 'info') {
     const box = $('logConsoleOutput');
     if (!box) return;
+    // Keep the console small: it used to grow forever and re-layout on every game log line.
+    while (box.childElementCount >= 300) box.removeChild(box.firstElementChild);
     const div = document.createElement('div');
     div.style.marginBottom = '4px';
     if (level === 'error') div.style.color = '#f87171';
@@ -177,6 +179,11 @@
     div.textContent = `[${new Date().toLocaleTimeString()}] ${line}`;
     box.appendChild(div);
     box.scrollTop = box.scrollHeight;
+  }
+
+  // While the game runs, the launcher stops all animations/blur so it does not steal GPU from Minecraft.
+  function syncGameRunningMode() {
+    document.body.classList.toggle('game-running', state.runningProfileIds && state.runningProfileIds.size > 0);
   }
 
   function formatCompactNumber(num) {
@@ -251,8 +258,6 @@
     } else if (targetNav === 'server') {
       if ($('view-server')) $('view-server').classList.add('active');
       if (window.InexServerUI) window.InexServerUI.show();
-    } else if (targetNav === 'lobby') {
-      if ($('view-lobby')) $('view-lobby').classList.add('active');
     } else if (targetNav === 'settings') {
       if ($('view-settings')) $('view-settings').classList.add('active');
       renderSettingsView();
@@ -281,8 +286,8 @@
     const idx = String(seedStr || 'A').charCodeAt(0) % colors.length;
     const accent = colors[idx];
     return `<svg width="24" height="24" viewBox="0 0 24 24">
-      <rect width="24" height="24" fill="#16161f"/>
-      <rect x="3" y="3" width="18" height="7" fill="#0d0d12"/>
+      <rect width="24" height="24" fill="#101010"/>
+      <rect x="3" y="3" width="18" height="7" fill="#090909"/>
       <rect x="5" y="11" width="4" height="3" fill="${accent}"/>
       <rect x="15" y="11" width="4" height="3" fill="${accent}"/>
       <rect x="9" y="16" width="6" height="2" fill="#e5e5e5"/>
@@ -456,7 +461,7 @@
         </div>
 
         <div class="profile-card-actions">
-          <button type="button" class="btn btn-sm btn-crimson btn-play" data-action="play">${ico('play')}Play</button>
+          <button type="button" class="btn btn-sm btn-launch btn-play" data-action="play">${ico('play')}Play</button>
           <button type="button" class="icon-btn" data-action="mods" title="Mods">${ico('cube')}</button>
           <button type="button" class="icon-btn" data-action="modpacks" title="Modpacks">${ico('box')}</button>
           <button type="button" class="icon-btn" data-action="resourcepacks" title="Resource packs">${ico('image')}</button>
@@ -570,6 +575,7 @@
       vSelect.value = defaultVer;
       $('profileLoaderSelect').value = 'fabric';
       if ($('profileHudEnabledInput')) $('profileHudEnabledInput').checked = true;
+      if ($('profilePerfPackInput')) $('profilePerfPackInput').checked = true;
       $('profileNameInput').value = `${defaultVer}-Fabric`;
       const defRam = state.settings.defaultRamMB || 4096;
       $('profileRamSlider').value = defRam;
@@ -588,6 +594,9 @@
     if ($('vanillaFormNoticePill')) $('vanillaFormNoticePill').style.display = isVanilla ? 'flex' : 'none';
     if ($('formBrowseModpacksBtn')) $('formBrowseModpacksBtn').style.display = isVanilla ? 'none' : 'inline-flex';
     if ($('profileHudField')) $('profileHudField').style.display = isVanilla ? 'none' : 'flex';
+    // Performance Pack: only when CREATING a Fabric profile (no toggle on existing profiles).
+    const creating = !($('editingProfileIdInput') && $('editingProfileIdInput').value);
+    if ($('profilePerfField')) $('profilePerfField').style.display = (creating && loader === 'fabric') ? 'flex' : 'none';
   }
 
   function renderVersionPostersGrid(selectedVersion) {
@@ -910,7 +919,7 @@
     const text = $('skinSyncStateText');
     if (toggle) toggle.checked = syncOn;
     if (pill) pill.classList.toggle('sync-on', syncOn);
-    if (text) text.innerHTML = syncOn ? 'ON &bull; CLOUD SYNC' : 'OFF &bull; MAX FPS';
+    if (text) text.innerHTML = syncOn ? 'ON &bull; LOCAL SKIN' : 'OFF &bull; DEFAULT SKINS';
   }
 
   function renderAccountsView() {
@@ -964,11 +973,7 @@
               showToast(err.message, 'error');
             }
           };
-          if (acc.type === 'local' && acc.hasCustomSkin) {
-            askRemoveChoice(acc.username, doRemove);
-          } else {
-            doRemove(false);
-          }
+          doRemove(false);
         });
 
         grid.appendChild(card);
@@ -977,34 +982,6 @@
 
     renderSkinSlots();
     drawMinecraftSkinPreview();
-  }
-
-  function askRemoveChoice(username, onChoose) {
-    const backdrop = document.createElement('div');
-    backdrop.className = 'modal-backdrop open';
-    backdrop.innerHTML =
-      '<div class="modal-card glass-panel" style="max-width:460px;">' +
-      '<h3 class="modal-title">Remove identity</h3>' +
-      '<p style="font-size:13px; color:var(--text-secondary);"><b>' + esc(username) + '</b><br>' +
-      'Remove: only removes it from this PC. Your skin stays in the cloud and comes back if you add the same name again.<br>' +
-      'Delete forever: also deletes the skin from the cloud. It will not come back.</p>' +
-      '<div style="display:flex; justify-content:flex-end; gap:10px; margin-top:8px; flex-wrap:wrap;">' +
-      '<button type="button" class="btn glass-btn" data-choice="cancel">Cancel</button>' +
-      '<button type="button" class="btn glass-btn" data-choice="remove">Remove</button>' +
-      '<button type="button" class="btn btn-danger" data-choice="forever">Delete forever</button>' +
-      '</div></div>';
-    backdrop.addEventListener('click', ev => {
-      const btn = ev.target.closest('[data-choice]');
-      if (btn) {
-        const choice = btn.getAttribute('data-choice');
-        backdrop.remove();
-        if (choice === 'remove') onChoose(false);
-        else if (choice === 'forever') onChoose(true);
-      } else if (ev.target === backdrop) {
-        backdrop.remove();
-      }
-    });
-    document.body.appendChild(backdrop);
   }
 
   function renderSkinSlots() {
@@ -1022,7 +999,7 @@
       card.className = 'skin-slot-card' + (slot.active ? ' active' : '');
       const modelLabel = slot.model === 'slim' ? 'SLIM (ALEX)' : 'CLASSIC (STEVE)';
       const sourceLabel = slot.customSkinDataUrl
-        ? `<span style="color:var(--success);">CUSTOM UPLOAD</span>`
+        ? `<span style="color:#e8e8ee;">CUSTOM UPLOAD</span>`
         : `PRESET: ${esc((slot.preset || 'crimson-phantom').toUpperCase())}`;
 
       card.innerHTML = `
@@ -1115,10 +1092,10 @@
   }
 
   const DEFAULT_SKIN_PALETTES = {
-    'crimson-phantom': { hair: '#0c0c10', skin: '#f3d8c7', eyes: '#e11d48', coat: '#181822', trim: '#e11d48', pants: '#0e0e14', shoes: '#be123c' },
-    'obsidian-knight': { hair: '#111827', skin: '#e5c1a7', eyes: '#38bdf8', coat: '#1e1b4b', trim: '#6366f1', pants: '#0f172a', shoes: '#312e81' },
-    'ash-valkyrie':    { hair: '#f4f4f6', skin: '#f5d0c5', eyes: '#f43f5e', coat: '#27272a', trim: '#fb7185', pants: '#18181b', shoes: '#9f1239' },
-    'blood-monarch':   { hair: '#450a0a', skin: '#ecc5b0', eyes: '#fbbf24', coat: '#7f1d1d', trim: '#f59e0b', pants: '#1c1917', shoes: '#450a0a' }
+    'crimson-phantom': { hair: '#080808', skin: '#f3d8c7', eyes: '#e11d48', coat: '#111111', trim: '#e11d48', pants: '#0a0a0a', shoes: '#be123c' },
+    'obsidian-knight': { hair: '#111111', skin: '#e5c1a7', eyes: '#38bdf8', coat: '#1e1b4b', trim: '#6366f1', pants: '#111111', shoes: '#312e81' },
+    'ash-valkyrie':    { hair: '#f4f4f6', skin: '#f5d0c5', eyes: '#f43f5e', coat: '#191919', trim: '#fb7185', pants: '#101010', shoes: '#9f1239' },
+    'blood-monarch':   { hair: '#450a0a', skin: '#ecc5b0', eyes: '#fbbf24', coat: '#7f1d1d', trim: '#f59e0b', pants: '#101010', shoes: '#450a0a' }
   };
   const defaultSkinCache = {};
 
@@ -1384,6 +1361,7 @@
     if (state.runningProfileIds.has(prof.id)) {
       await api.stopProfile(prof.id);
       state.runningProfileIds.delete(prof.id);
+      syncGameRunningMode();
       renderHomeView();
       showToast('Game stopped');
       return;
@@ -1396,11 +1374,15 @@
       const res = await api.launchProfile(prof.id);
       if (res && res.launched) {
         state.runningProfileIds.add(prof.id);
+        syncGameRunningMode();
         const refreshed = await api.listProfiles();
         state.profiles = refreshed.profiles;
         renderHomeView();
         progressDone('Game launched');
         showToast('Game launched', 'success');
+        if (state.settings && state.settings.closeBehavior === 'minimize') {
+          try { api.minimizeWindow(); } catch (_) {}
+        }
       } else {
         progressHide();
       }
@@ -1518,7 +1500,8 @@
         loaderVersion: ($('profileLoaderVersionSelect') &&$('profileLoaderVersionSelect').value) || 'latest',
         javaRuntime: ($('profileJavaSelect') &&$('profileJavaSelect').value) || 'auto',
         ramMB: Number($('profileRamSlider').value),
-        hudEnabled: $('profileHudEnabledInput') ?$('profileHudEnabledInput').checked : true
+        hudEnabled: $('profileHudEnabledInput') ?$('profileHudEnabledInput').checked : true,
+        perfPack: $('profilePerfPackInput') ? $('profilePerfPackInput').checked : false
       };
 
       const loaderOpt = $('profileLoaderSelect').selectedOptions[0];
@@ -1656,8 +1639,8 @@
         updateSkinSyncUI();
         showToast(
           enabled
-            ? 'Skin Sync ON: Real-time Firebase cosmetics enabled.'
-            : 'Skin Sync OFF (Max FPS): Cosmetics & Firebase sync disabled; using default skins.',
+            ? 'Skin Sync ON: your skin is shown in your own game (local only, nobody else sees it).'
+            : 'Skin Sync OFF: default skins everywhere.',
           enabled ? 'success' : 'info'
         );
       } catch (err) {
@@ -1820,6 +1803,7 @@
     if (api.onGameExit) {
       api.onGameExit(info => {
         state.runningProfileIds.delete(info.profileId);
+        syncGameRunningMode();
         if (state.runningProfileIds.size === 0) {
           const consoleOutput = $('logConsoleOutput');
           if (consoleOutput) consoleOutput.replaceChildren();

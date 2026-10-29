@@ -335,8 +335,6 @@ class AccountManager {
     if (!found) throw new Error(`Account not found: ${accountId}`);
     this.state.activeAccountId = found.id;
     this._save();
-    this._lastCloudFingerprint = null;
-    this.syncSkinToCloud();
     return this.listAccounts();
   }
 
@@ -350,8 +348,6 @@ class AccountManager {
     if (existing) {
       this.state.activeAccountId = existing.id;
       this._save();
-      this._lastCloudFingerprint = null;
-      this.syncSkinToCloud();
       return this.listAccounts();
     }
 
@@ -369,78 +365,15 @@ class AccountManager {
     this.state.accounts.unshift(newAcc);
     this.state.activeAccountId = newAcc.id;
     this._save();
-    this._lastCloudFingerprint = null;
-    this.syncSkinToCloud();
     return this.listAccounts();
   }
 
-  // ---- skin-cosmetics: restore a skin from Firebase / delete it forever (local accounts only) ----
-  _cosmeticsUrl(username) {
-    return 'https://inex-cosmetics-default-rtdb.firebaseio.com/cosmetics/' + encodeURIComponent(String(username).toLowerCase()) + '.json';
-  }
-
-  // Returns { skin(base64), model } or null (not found / offline / invalid). Never throws.
-  async _fetchCloudSkin(username) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
-    try {
-      const res = await fetch(this._cosmeticsUrl(username), { signal: controller.signal });
-      if (!res.ok) return null;
-      const data = await res.json();
-      if (!data || typeof data.skin !== 'string' || !data.skin) return null;
-      const buf = Buffer.from(data.skin, 'base64');
-      if (buf.length < 8 || buf.length > 1024 * 1024 || buf.readUInt32BE(0) !== 0x89504e47) return null;
-      return { skin: buf.toString('base64'), model: data.model === 'classic' ? 'classic' : 'slim' };
-    } catch (_) {
-      return null;
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
+  // Skins are local-only now (no cloud). Kept as thin wrappers so existing callers keep working.
   async addLocalAccountRestoring(username) {
-    const clean = String(username || '').trim();
-    const alreadyThere = this.state.accounts.some(a => a.username.toLowerCase() === clean.toLowerCase() && a.type === 'local');
-    let cloud = null;
-    if (!alreadyThere && /^[a-zA-Z0-9_]{3,16}$/.test(clean) && this.settingsManager.getSettings().enableSkinSync !== false) {
-      cloud = await this._fetchCloudSkin(clean);
-    }
-    const result = this.addLocalAccount(clean);
-    if (cloud) {
-      const acc = this.state.accounts.find(a => a.id === this.state.activeAccountId);
-      const slot = acc && acc.skinSlots && acc.skinSlots[0];
-      if (slot) {
-        slot.customSkinDataUrl = 'data:image/png;base64,' + cloud.skin;
-        slot.model = cloud.model;
-        for (const s of acc.skinSlots) s.active = s.id === slot.id;
-        acc.activeSkinSlot = slot.id;
-        this._save();
-        // Same data is already in the cloud, so skip the pointless re-upload.
-        this._lastCloudFingerprint = crypto.createHash('sha1')
-          .update(clean.toLowerCase() + '|' + cloud.model + '|' + cloud.skin).digest('hex');
-        return this.listAccounts();
-      }
-    }
-    return result;
+    return this.addLocalAccount(username);
   }
 
   async deleteAccountForever(accountId) {
-    const acc = this.state.accounts.find(a => a.id === accountId);
-    if (!acc) throw new Error('Account not found.');
-    if (acc.type === 'local' && acc.username) {
-      const failMsg = 'Could not reach the cloud, so nothing was deleted. Check your internet and try again.';
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 8000);
-      try {
-        const res = await fetch(this._cosmeticsUrl(acc.username), { method: 'DELETE', signal: controller.signal });
-        if (!res.ok) throw new Error(failMsg);
-      } catch (_) {
-        throw new Error(failMsg);
-      } finally {
-        clearTimeout(timer);
-      }
-      this._lastCloudFingerprint = null;
-    }
     return this.removeAccount(accountId);
   }
 
@@ -637,8 +570,6 @@ class AccountManager {
 
     this.state.activeAccountId = accId;
     this._save();
-    this._lastCloudFingerprint = null;
-    this.syncSkinToCloud();
     return this.listAccounts();
   }
 
@@ -741,8 +672,6 @@ class AccountManager {
     }
 
     this._save();
-    this._lastCloudFingerprint = null;
-    this.syncSkinToCloud();
     return this.listAccounts();
   }
 
@@ -761,8 +690,6 @@ class AccountManager {
       activeAcc.activeSkinSlot = activeAcc.skinSlots[0].id;
     }
     this._save();
-    this._lastCloudFingerprint = null;
-    this.syncSkinToCloud();
     return this.listAccounts();
   }
 
@@ -835,78 +762,52 @@ class AccountManager {
     });
   }
 
-  _ensureLocalCosmeticsPack(gameDir, version) {
-    const packRoot = path.join(gameDir, 'resourcepacks', 'INEX-Local-Cosmetics');
-    fs.mkdirSync(packRoot, { recursive: true });
-    fs.mkdirSync(path.join(packRoot, 'assets', 'minecraft', 'textures', 'entity', 'player', 'wide'), { recursive: true });
-    fs.mkdirSync(path.join(packRoot, 'assets', 'minecraft', 'textures', 'entity', 'player', 'slim'), { recursive: true });
-
-    const activeAcc = this.state.accounts.find(a => a.id === this.state.activeAccountId) || this.state.accounts[0] || null;
-    const slot = activeAcc && activeAcc.skinSlots && activeAcc.skinSlots.length
-      ? (activeAcc.skinSlots.find(s => s.id === activeAcc.activeSkinSlot) || activeAcc.skinSlots.find(s => s.active) || activeAcc.skinSlots[0])
-      : { model: 'slim', preset: 'crimson-phantom', capePreset: 'inex-crest' };
-
-    const skinPng = (slot.customSkinDataUrl && slot.customSkinDataUrl.startsWith('data:image/png;base64,'))
-      ? Buffer.from(slot.customSkinDataUrl.split(',')[1], 'base64')
-      : this._generatePresetSkinPng(slot.preset || 'crimson-phantom');
-    const capePng = this._generateCapePng(slot.capePreset || 'inex-crest');
-    const baseModel = String(slot.model || 'slim').toLowerCase() === 'classic' ? 'wide' : 'slim';
-
-    const packMeta = {
-      pack: {
-        pack_format: version && /^1\.(?:20|21|22|23|24)/.test(String(version)) ? 15 : 12,
-        description: 'INEX Local Cosmetics'
-      }
-    };
-
-    fs.writeFileSync(path.join(packRoot, 'pack.mcmeta'), JSON.stringify(packMeta, null, 2), 'utf8');
-    fs.writeFileSync(path.join(packRoot, 'assets', 'minecraft', 'textures', 'entity', 'player', baseModel === 'slim' ? 'slim' : 'wide', baseModel === 'slim' ? 'alex.png' : 'steve.png'), baseModel === 'slim' ? skinPng : skinPng);
-    fs.writeFileSync(path.join(packRoot, 'assets', 'minecraft', 'textures', 'entity', 'player', 'wide', 'steve.png'), skinPng);
-    fs.writeFileSync(path.join(packRoot, 'assets', 'minecraft', 'textures', 'entity', 'player', 'slim', 'alex.png'), skinPng);
-    fs.writeFileSync(path.join(packRoot, 'assets', 'minecraft', 'textures', 'entity', 'player', 'cape.png'), capePng);
-
-    const overrideJar = path.join(gameDir, 'inex-cosmetics-override.jar');
-    const overrideFiles = {
-      'assets/minecraft/textures/entity/player/wide/steve.png': skinPng,
-      'assets/minecraft/textures/entity/player/slim/alex.png': skinPng,
-      'assets/minecraft/textures/entity/player/cape.png': capePng,
-      'pack.mcmeta': JSON.stringify(packMeta, null, 2)
-    };
-    fs.writeFileSync(overrideJar, createStoredZipBuffer(overrideFiles));
-
-    const optionsPath = path.join(gameDir, 'options.txt');
-    const hasPack = fs.existsSync(optionsPath) ? fs.readFileSync(optionsPath, 'utf8') : '';
-    const packLine = 'resourcePacks:["file/INEX-Local-Cosmetics"]';
-    const incompatibleLine = 'incompatibleResourcePacks:[]';
-    let updated = hasPack;
-    if (!updated.includes('file/INEX-Local-Cosmetics')) {
-      updated = updated.trim() ? `${updated.trim()}\n${packLine}\n${incompatibleLine}` : `${packLine}\n${incompatibleLine}`;
-    }
-    fs.writeFileSync(optionsPath, updated, 'utf8');
+  // The active account's custom skin (PNG buffer + model), or null when it uses a preset/default skin.
+  _activeCustomSkin() {
+    const acc = this.getActiveAccount();
+    if (!acc) return null;
+    const slots = Array.isArray(acc.skinSlots) ? acc.skinSlots : [];
+    const slot = slots.find(s => s.id === acc.activeSkinSlot) || slots.find(s => s.active) || slots[0];
+    if (!slot || typeof slot.customSkinDataUrl !== 'string' || !slot.customSkinDataUrl.startsWith('data:image/png;base64,')) return null;
+    const buf = Buffer.from(slot.customSkinDataUrl.split(',')[1] || '', 'base64');
+    if (buf.length < 8 || buf.length > 1024 * 1024 || buf.readUInt32BE(0) !== 0x89504e47) return null;
+    return { png: buf, model: String(slot.model || 'slim').toLowerCase() === 'classic' ? 'classic' : 'slim' };
   }
 
-  applyLocalCosmeticsToGameDir(gameDir, version = null) {
-    if (gameDir) this._removeLegacyCosmetics(gameDir);
+  // Local-only skin: writes the player's own skin to <gameDir>/inex-self-skin.png.
+  // No cloud, no resource pack, no jar override -> nobody else is affected and nothing is shown to other players.
+  // Returns { skinFile, model } (skinFile is null when there is nothing to apply).
+  applyLocalCosmeticsToGameDir(gameDir) {
+    const result = { skinFile: null, model: 'slim' };
+    if (!gameDir) return result;
+    fs.mkdirSync(gameDir, { recursive: true });
+
+    // Clean up everything older versions put into the game folder (resource pack, override jar, options.txt entries).
+    this._removeLegacyCosmetics(gameDir);
+    try {
+      this._removeNameplatePack(gameDir);
+    } catch (err) {
+      console.error('[AccountManager] options.txt cleanup skipped:', err.message);
+    }
+
+    const skinFile = path.join(gameDir, 'inex-self-skin.png');
     const settings = this.settingsManager.getSettings();
-    if (gameDir) {
-      fs.mkdirSync(gameDir, { recursive: true });
-      fs.writeFileSync(
-        path.join(gameDir, 'inex-cosmetics-settings.txt'),
-        settings.enableSkinSync === false ? 'false' : 'true',
-        'utf8'
-      );
+    const skin = settings.enableSkinSync === false ? null : this._activeCustomSkin();
+    if (!skin) {
+      fs.rmSync(skinFile, { force: true });
+      return result;
     }
-    if (gameDir) this._removeNameplatePack(gameDir);
-    if (gameDir) this._ensureLocalCosmeticsPack(gameDir, version);
-    if (settings.enableSkinSync === false) {
-      this.removeSkinFromCloud();
-      return;
-    }
-    this.syncSkinToCloud();
+    const tmp = `${skinFile}.tmp`;
+    fs.writeFileSync(tmp, skin.png);
+    fs.renameSync(tmp, skinFile);
+    result.skinFile = skinFile;
+    result.model = skin.model;
+    return result;
   }
 
   _removeNameplatePack(gameDir) {
     fs.rmSync(path.join(gameDir, 'resourcepacks', 'INEX-Nameplate'), { recursive: true, force: true });
+    fs.rmSync(path.join(gameDir, 'resourcepacks', 'INEX-Local-Cosmetics'), { recursive: true, force: true });
     const optionsPath = path.join(gameDir, 'options.txt');
     if (!fs.existsSync(optionsPath)) return;
     let lines;
@@ -916,7 +817,7 @@ class AccountManager {
       throw new Error(`Could not read Minecraft resource-pack settings: ${err.message}`);
     }
 
-    const packIds = new Set(['file/INEX-Nameplate', 'INEX-Nameplate']);
+    const packIds = new Set(['file/INEX-Nameplate', 'INEX-Nameplate', 'file/INEX-Local-Cosmetics', 'INEX-Local-Cosmetics']);
     let changed = false;
     const updatedLines = lines.map(line => {
       const separator = line.indexOf(':');
@@ -943,77 +844,13 @@ class AccountManager {
   }
 
   _removeLegacyCosmetics(gameDir) {
-    const packId = 'file/INEX-Local-Cosmetics';
-    const legacyPackId = 'INEX-Local-Cosmetics';
     try {
       fs.rmSync(path.join(gameDir, 'resourcepacks', 'INEX-Local-Cosmetics'), { recursive: true, force: true });
       fs.rmSync(path.join(gameDir, 'inex-cosmetics-override.jar'), { force: true });
       fs.rmSync(path.join(gameDir, 'inex-cosmetics-state.json'), { force: true });
+      fs.rmSync(path.join(gameDir, 'inex-cosmetics-settings.txt'), { force: true });
     } catch (err) {
       console.error('[AccountManager] Could not remove legacy cosmetics files:', err.message);
-    }
-  }
-
-  removeSkinFromCloud() {
-    try {
-      this._lastCloudFingerprint = null;
-      const acc = this.getActiveAccount();
-      if (!acc || !acc.username) return;
-      const key = acc.username.toLowerCase();
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 8000);
-      fetch(`https://inex-cosmetics-default-rtdb.firebaseio.com/cosmetics/${encodeURIComponent(key)}.json`, {
-        method: 'DELETE',
-        signal: controller.signal
-      })
-        .catch(() => {})
-        .finally(() => clearTimeout(timer));
-    } catch (_) {}
-  }
-
-  syncSkinToCloud() {
-    try {
-      const settings = this.settingsManager.getSettings();
-      if (settings.enableSkinSync === false) {
-        this.removeSkinFromCloud();
-        return;
-      }
-
-      const acc = this.getActiveAccount();
-      if (!acc || !acc.username) return;
-      const slots = acc.skinSlots && acc.skinSlots.length ? acc.skinSlots : this._defaultSkinSlots();
-      const slot = slots.find(s => s.id === acc.activeSkinSlot) || slots.find(s => s.active) || slots[0];
-      if (!slot) return;
-
-      // Default/preset skins are never uploaded (and never delete what is already in the cloud).
-      if (!(slot.customSkinDataUrl && slot.customSkinDataUrl.startsWith('data:image/png;base64,'))) return;
-      const skinBuf = Buffer.from(slot.customSkinDataUrl.split(',')[1], 'base64');
-
-      const key = acc.username.toLowerCase();
-      const payload = {
-        updatedAt: Date.now(),
-        model: slot.model || 'slim',
-        skin: skinBuf.toString('base64')
-      };
-      const fingerprint = crypto.createHash('sha1').update(`${key}|${payload.model}|${payload.skin}`).digest('hex');
-      if (this._lastCloudFingerprint === fingerprint) return;
-      this._lastCloudFingerprint = fingerprint;
-
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 10000);
-      fetch(`https://inex-cosmetics-default-rtdb.firebaseio.com/cosmetics/${encodeURIComponent(key)}.json`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      })
-        .catch(err => {
-          this._lastCloudFingerprint = null;
-          console.error('[INEX Cosmetics Sync]', err.message);
-        })
-        .finally(() => clearTimeout(timer));
-    } catch (err) {
-      console.error('[INEX Cosmetics Sync]', err.message);
     }
   }
 }

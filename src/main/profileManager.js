@@ -350,7 +350,9 @@ class ProfileManager {
       ramMB, gameDir, installed: false,
       createdAt: new Date().toISOString(), lastPlayed: null,
       modpackInfo: loader === 'vanilla' ? null : (payload.modpackInfo || null),
-      hudEnabled: loader !== 'vanilla' && payload.hudEnabled !== false
+      hudEnabled: loader !== 'vanilla' && payload.hudEnabled !== false,
+      // Performance Pack: Fabric only, decided once at creation (no toggle afterwards), never for modpack profiles.
+      perfPackEnabled: loader === 'fabric' && payload.perfPack !== false && !payload.modpackInfo
     };
 
     newProfile.installed = this.verifyInstallationState(newProfile);

@@ -43,13 +43,15 @@ jobs:
             ## INEX CLIENT ${{ github.ref_name }} 🎮
 
             ### ✨ Highlights & Features
-            - 🎮 **Profile Isolation**: Independent `.minecraft` instances, isolated game directories, custom JVM flags, and flexible RAM controls.
-            - ⚡ **Multi-Loader Support**: Full metadata resolution and installation for **Vanilla**, **Fabric**, **Quilt**, **Forge**, and **NeoForge**.
-            - 📦 **Modrinth API v2 Integration**: In-app content browser to install Mods, Modpacks (`.mrpack`), Resource Packs, Shaders, and Data Packs in one click.
-            - ☕ **Smart Java Runtime Management**: Automatic detection for Java 8, 17, 21, and 25 with version compatibility verification and portable JRE auto-bundling.
-            - 👤 **Accounts & 3D Skin Studio**: Microsoft OAuth2 authentication + offline Local profiles with animated 3D character and waving cape previews.
-            - 🎧 **Discord RPC & Live Console**: Live Discord Rich Presence with game status and real-time Minecraft output console.
-            - 🚀 **Tauri v2 + Rust Architecture**: Ultra-fast startup, low RAM footprint, and smooth Windows 10/11 desktop experience.
+            - 🎮 **Profile Isolation**: independent game directories per profile, custom JVM flags and flexible RAM controls.
+            - ⚡ **Mod Loaders**: install and launch **Fabric**, **Forge** and **Vanilla** profiles.
+            - 📦 **Modrinth Integration**: in-app browser to install Mods, Modpacks (`.mrpack`), Resource Packs, Shaders and Data Packs.
+            - ☕ **Smart Java Management**: automatic detection of Java 8, 17, 21 and 25 with a portable runtime when none is installed.
+            - 👤 **Accounts & Skin Studio**: Microsoft sign-in, offline accounts, skin slots and skin sync.
+            - 🖥️ **Server Hosting**: create Vanilla, Paper, Purpur and Fabric servers with console, players, plugins/mods, file editor, Geyser (Bedrock) support and built-in public tunnels.
+            - 🔑 **Server Access by Code**: let a friend manage one of your servers over direct P2P. No account and no server, just two copy-paste codes.
+            - 🎧 **Discord RPC & Live Console**: Discord Rich Presence and a real-time Minecraft output console.
+            - 🚀 **Tauri v2 + Rust**: fast startup, low RAM usage and signed automatic updates.
 
             ### 📦 Installation
             Download the installer (`INEX.CLIENT_${{ github.ref_name }}_x64-setup.exe`) below and run the setup wizard.

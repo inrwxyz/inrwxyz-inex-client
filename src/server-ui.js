@@ -163,7 +163,7 @@
       }
       .toast-item {
         min-width: 240px; max-width: 380px; padding: 11px 16px; border-radius: 12px;
-        background: rgba(14, 12, 20, 0.96); border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(10, 10, 10, 0.96); border: 1px solid rgba(255, 255, 255, 0.14);
         border-left: 4px solid var(--crimson-500); color: #fff; font-size: 12.5px; font-weight: 700;
         box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65); backdrop-filter: blur(16px);
         pointer-events: auto; animation: inexToastIn 0.2s ease-out;
@@ -178,7 +178,7 @@
       .srv-hero-frame {
         flex: 1; position: relative; border-radius: 22px; padding: 26px 38px 26px 26px;
         display: flex; align-items: stretch; justify-content: space-between;
-        background: radial-gradient(ellipse 75% 65% at 50% 45%, rgba(190, 18, 60, 0.16) 0%, rgba(10, 10, 15, 0.65) 100%);
+        background: #030303;
         border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.5);
         min-height: 0; overflow: hidden;
       }
@@ -201,14 +201,14 @@
       }
       .srv-list-card {
         display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 12px;
-        background: rgba(17, 17, 26, 0.72); border: 1px solid rgba(255, 255, 255, 0.08); cursor: pointer; transition: 0.16s;
+        background: rgba(12, 12, 12, 0.72); border: 1px solid rgba(255, 255, 255, 0.08); cursor: pointer; transition: 0.16s;
       }
-      .srv-list-card:hover { border-color: rgba(255, 255, 255, 0.2); background: rgba(24, 20, 32, 0.88); }
-      .srv-list-card.active { border-color: var(--crimson-500); background: rgba(225, 29, 72, 0.14); }
+      .srv-list-card:hover { border-color: rgba(225, 29, 72, 0.6); background: rgba(16, 16, 16, 0.88); box-shadow: 0 0 0 1px rgba(255,255,255,.10), 0 0 16px rgba(225,29,72,.26), 0 0 34px rgba(225,29,72,.10); }
+      .srv-list-card.active { border-color: rgba(255, 255, 255, 0.30); background: rgba(255, 255, 255, 0.06); }
       .srv-list-badge {
-        width: 34px; height: 34px; border-radius: 9px; background: rgba(225, 29, 72, 0.18);
-        border: 1px solid rgba(225, 29, 72, 0.42); display: flex; align-items: center; justify-content: center;
-        font-weight: 900; font-size: 12.5px; color: var(--crimson-400); flex-shrink: 0;
+        width: 34px; height: 34px; border-radius: 9px; background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.14); display: flex; align-items: center; justify-content: center;
+        font-weight: 900; font-size: 12.5px; color: #e4e4ec; flex-shrink: 0;
       }
       .srv-list-badge img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; image-rendering: pixelated; display: block; }
       .srv-list-badge.has-logo { background: transparent; padding: 0; overflow: hidden; }
@@ -216,7 +216,7 @@
         display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 14px; cursor: pointer;
         border: 1.5px dashed rgba(255, 255, 255, 0.22); background: rgba(255, 255, 255, 0.03); transition: 0.15s;
       }
-      .srv-logo-drop:hover, .srv-logo-drop.over { border-color: var(--crimson-500); background: rgba(225, 29, 72, 0.1); }
+      .srv-logo-drop:hover, .srv-logo-drop.over { border-color: rgba(225, 29, 72, 0.6); background: rgba(255, 255, 255, 0.05); }
       .srv-logo-prev {
         width: 64px; height: 64px; border-radius: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
         background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.12); overflow: hidden; color: var(--text-muted); font-size: 24px;
@@ -228,16 +228,16 @@
       .srv-list-name { font-size: 13px; font-weight: 800; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .srv-list-sub { font-size: 11px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; margin-top: 2px; }
       .srv-prop-bool { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
-      .srv-prop-bool:hover { border-color: rgba(225, 29, 72, 0.45); background: rgba(255, 255, 255, 0.06); }
+      .srv-prop-bool:hover { border-color: rgba(225, 29, 72, 0.6); background: rgba(255, 255, 255, 0.06); }
       .srv-props-save {
         display: flex; align-items: center; justify-content: space-between; gap: 14px;
         position: sticky; bottom: 0; padding: 12px 6px 6px 4px;
-        background: rgba(9, 9, 14, 0.96); border-top: 1px solid var(--border-subtle);
+        background: rgba(7, 7, 7, 0.96); border-top: 1px solid var(--border-subtle);
       }
       .srv-props-save-right { display: flex; align-items: center; gap: 12px; margin-right: 4px; }
       .srv-saved-Floater {
         display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 9px;
-        background: rgba(16, 185, 129, 0.16); border: 1px solid rgba(16, 185, 129, 0.5); color: #34d399;
+        background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.22); color: #e8e8ee;
         font-size: 12px; font-weight: 800; opacity: 0; transform: translateX(8px);
         transition: opacity 0.2s ease, transform 0.2s ease; pointer-events: none;
       }
@@ -321,7 +321,7 @@
   function actionButtons(srv) {
     const st = srv.status;
     if (st === 'offline') {
-      return `<button type="button" class="btn btn-crimson" data-act="start" data-id="${esc(srv.id)}">${ico('play')}Start Server</button>`;
+      return `<button type="button" class="btn btn-launch" data-act="start" data-id="${esc(srv.id)}">${ico('play')}Start Server</button>`;
     }
     if (st === 'starting') {
       return `<button type="button" class="btn btn-danger" data-act="kill" data-id="${esc(srv.id)}">${ico('power')}Stop</button>`;
@@ -347,7 +347,7 @@
             <p style="color:var(--text-secondary); font-size:13.5px; line-height:1.5;">
               Host your own Paper, Purpur, Fabric, or Vanilla Minecraft server in one click. Automatic Java setup, Playit.gg public IP tunneling, and Bedrock crossplay included.
             </p>
-            <button type="button" class="btn btn-crimson" id="srvEmptyCreate" style="padding:13px 28px; font-size:14px; margin-top:4px;">
+            <button type="button" class="btn btn-launch" id="srvEmptyCreate" style="padding:13px 28px; font-size:14px; margin-top:4px;">
               ${ico('plus')}Create Your First Server
             </button>
           </div>
@@ -401,7 +401,7 @@
           <div class="srv-left-list-col">
             <div class="srv-left-head">
               <div class="srv-left-title"><span class="red-dot"></span>SERVERS (${S.servers.length})</div>
-              <button type="button" class="btn btn-sm btn-crimson" id="srvHubNewTopBtn">${ico('plus', 'ico-xs')}New</button>
+              <button type="button" class="btn btn-sm btn-launch" id="srvHubNewTopBtn">${ico('plus', 'ico-xs')}New</button>
             </div>
             <div class="srv-left-scroll">${serverListHtml}</div>
           </div>
@@ -537,7 +537,7 @@
       <div class="srv-detail glass-panel">
         <div class="srv-head">
           <div class="srv-head-title">
-            <button type="button" class="btn btn-sm glass-btn" id="srvBack" style="border-color:rgba(225,29,72,0.45); color:#fff;">
+            <button type="button" class="btn btn-sm glass-btn" id="srvBack" style="color:#fff;">
               ${ico('back')}Back to Server Menu
             </button>
             <h3>${esc(srv.name)}</h3>
@@ -806,7 +806,7 @@
 
   function playerSection(title, count, rows, empty, extraRight = '') {
     return `
-      <div class="srv-psection" style="background:rgba(16,14,22,0.55); border:1px solid rgba(255,255,255,0.07); border-radius:12px; padding:12px 14px;">
+      <div class="srv-psection" style="background:rgba(11, 11, 11,0.55); border:1px solid rgba(255,255,255,0.07); border-radius:12px; padding:12px 14px;">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
           <div class="settings-group-label" style="margin:0;">${esc(title.toUpperCase())}${count != null ? ` (${count})` : ''}</div>
           ${extraRight}
@@ -1400,9 +1400,9 @@
     }
 
     const provBtn = (key, title, sub, active) => `
-      <button type="button" class="srv-prov" data-prov="${key}" style="flex:1; min-width:210px; text-align:left; display:flex; flex-direction:column; gap:3px; padding:11px 13px; border-radius:11px; cursor:pointer; color:inherit; font:inherit; background:${active ? 'var(--crimson-subtle)' : 'rgba(255,255,255,0.03)'}; border:1px solid ${active ? 'var(--border-crimson)' : 'var(--border-subtle)'};">
+      <button type="button" class="srv-prov" data-prov="${key}" style="flex:1; min-width:210px; text-align:left; display:flex; flex-direction:column; gap:3px; padding:11px 13px; border-radius:11px; cursor:pointer; color:inherit; font:inherit; background:${active ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.03)'}; border:1px solid ${active ? 'rgba(255,255,255,0.30)' : 'var(--border-subtle)'};">
         <span style="display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:700; color:#fff;">
-          <span style="width:9px; height:9px; border-radius:50%; background:${active ? 'var(--crimson-500)' : 'transparent'}; border:2px solid ${active ? 'var(--crimson-500)' : 'var(--text-secondary)'};"></span>${esc(title)}
+          <span style="width:9px; height:9px; border-radius:50%; background:${active ? '#fff' : 'transparent'}; border:2px solid ${active ? '#fff' : 'var(--text-secondary)'};"></span>${esc(title)}
         </span>
         <span style="font-size:11.5px; color:var(--text-secondary); line-height:1.4;">${esc(sub)}</span>
       </button>`;
@@ -1732,7 +1732,7 @@
   async function loadVersions(loader) {
     const sel = $('srvCVersion');
     if (S.versionsCache[loader] && S.versionsCache[loader].length) { fillVersions(); return; }
-    if (sel) { sel.innerHTML = '<option>Loading versions...</option>'; sel.disabled = true; }
+    if (sel) { sel.innerHTML = '<option>Loading versions...</option>'; sel.disabled = true; const l = $('srvCVersionLabel'); if (l) l.textContent = 'Loading versions...'; const b = $('srvCVersionBtn'); if (b) b.disabled = true; }
     try {
       S.versionsCache[loader] = await api.getServerVersions(loader);
     } catch (_) {
@@ -1749,6 +1749,46 @@
     sel.innerHTML = list.length ? list.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('') : '<option value="">No versions available</option>';
     if (!list.includes(S.create.version)) S.create.version = list[0] || '';
     sel.value = S.create.version;
+    syncVersionPicker(list);
+  }
+
+  function syncVersionPicker(list) {
+    const btn = $('srvCVersionBtn'), menu = $('srvCVersionMenu'), label = $('srvCVersionLabel');
+    if (!btn || !menu) return;
+    btn.disabled = !list.length;
+    label.textContent = list.length ? (S.create.version || list[0]) : 'No versions available';
+    menu.innerHTML = list.map(v => `<div class="vsel-opt${v === S.create.version ? ' active' : ''}" role="option" data-v="${esc(v)}">${esc(v)}</div>`).join('');
+  }
+
+  function bindVersionPicker() {
+    const wrap = $('srvCVersionWrap'), btn = $('srvCVersionBtn'), menu = $('srvCVersionMenu');
+    if (!wrap || !btn || !menu) return;
+    const close = () => wrap.classList.remove('open');
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const opening = !wrap.classList.contains('open');
+      wrap.classList.toggle('open', opening);
+      if (opening) {
+        const act = menu.querySelector('.active');
+        if (act) menu.scrollTop = Math.max(0, act.offsetTop - 60);
+        menu.scrollIntoView({ block: 'nearest' });
+      }
+    });
+    menu.addEventListener('click', e => {
+      const opt = e.target.closest('.vsel-opt');
+      if (!opt) return;
+      const sel = $('srvCVersion');
+      sel.value = opt.getAttribute('data-v');
+      sel.dispatchEvent(new Event('change'));
+      syncVersionPicker(S.versionsCache[S.create.loader] || []);
+      close();
+    });
+    if (bindVersionPicker._off) bindVersionPicker._off();
+    const onDoc = e => { if (!wrap.contains(e.target)) close(); };
+    const onKey = e => { if (e.key === 'Escape') close(); };
+    document.addEventListener('click', onDoc);
+    document.addEventListener('keydown', onKey);
+    bindVersionPicker._off = () => { document.removeEventListener('click', onDoc); document.removeEventListener('keydown', onKey); };
   }
 
   function logoFromFile(file) {
@@ -1835,7 +1875,11 @@
         <div class="srv-create-row">
           <div class="field-group">
             <label class="field-label" for="srvCVersion">Minecraft Version</label>
-            <select class="inex-select glass-input" id="srvCVersion"></select>
+            <div class="vsel" id="srvCVersionWrap">
+              <select class="inex-select glass-input vsel-native" id="srvCVersion"></select>
+              <button type="button" class="vsel-btn" id="srvCVersionBtn" aria-haspopup="listbox"><span id="srvCVersionLabel">Loading...</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+              <div class="vsel-menu" id="srvCVersionMenu" role="listbox"></div>
+            </div>
           </div>
           <div class="field-group">
             <label class="field-label" for="srvCPort">Server Port</label>
@@ -1883,7 +1927,7 @@
         </div>
 
         <div class="srv-create-actions">
-          <button type="button" class="btn btn-crimson" id="srvCCreate"${c.creating ? ' disabled' : ''}>
+          <button type="button" class="btn btn-launch" id="srvCCreate"${c.creating ? ' disabled' : ''}>
             ${ico('plus')}${c.creating ? 'Downloading & Creating Server...' : 'Create Server'}
           </button>
         </div>
@@ -1915,6 +1959,7 @@
     }));
 
     $('srvCCancel').addEventListener('click', () => { S.mode = 'hub'; renderAll(); });$('srvCCreate').addEventListener('click', doCreate);
+    bindVersionPicker();
     fillVersions();
   }
 

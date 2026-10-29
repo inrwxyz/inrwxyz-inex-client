@@ -6,37 +6,6 @@
   <title>INEX CLIENT — Minecraft Launcher</title>
   <link rel="stylesheet" href="style.css" />
   <style>
-    .home-emblem-outer {
-      width: 190px;
-      height: 190px;
-      padding: 10px;
-      border-radius: 36px;
-      border: 1.5px dashed rgba(225, 29, 72, 0.45);
-      background: radial-gradient(circle at 50% 35%, rgba(225, 29, 72, 0.14) 0%, rgba(10, 10, 16, 0.4) 100%);
-      margin-bottom: 22px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .home-emblem-inner {
-      width: 100%;
-      height: 100%;
-      border-radius: 26px;
-      overflow: hidden;
-      background: #050508;
-      border: 2px solid rgba(225, 29, 72, 0.65);
-      box-shadow: 0 14px 38px rgba(0, 0, 0, 0.75), 0 0 24px rgba(225, 29, 72, 0.25);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .home-emblem-img {
-      width: 100% !important;
-      height: 100% !important;
-      object-fit: cover !important;
-      border-radius: 24px;
-      display: block;
-    }
     .bracket-card.stack-card {
       flex-direction: column;
       align-items: stretch;
@@ -149,9 +118,6 @@
           <button type="button" class="nav-btn" data-nav="server">
             <svg class="ico"><use href="#i-server"/></svg><span>Server</span>
           </button>
-          <button type="button" class="nav-btn" data-nav="lobby">
-            <svg class="ico"><use href="#i-chat"/></svg><span>Lobby</span>
-          </button>
         </nav>
 
         <div class="dock-group dock-bottom">
@@ -180,11 +146,6 @@
 
             <div class="home-hero-grid">
               <div class="home-brand-col">
-                <div class="home-emblem-outer">
-                  <div class="home-emblem-inner">
-                    <img src="inex-logo.png" alt="INEX emblem" class="home-emblem-img custom-logo-target" />
-                  </div>
-                </div>
                 <h1 class="home-brand-title">INEX <span>CLIENT</span></h1>
                 <p class="home-brand-subtitle">LIFE IS A GAME &bull; CHOOSE YOUR LEVEL</p>
               </div>
@@ -351,6 +312,14 @@
                     <strong>Enable my HUD mod jar in this profile</strong>
                   </div>
                   <span class="field-hint">Uses the jar from the HUD Mods folder, only if it supports this loader and Minecraft version.</span>
+                </label>
+
+                <label class="hud-check-card" id="profilePerfField" for="profilePerfPackInput">
+                  <div class="hud-check-row">
+                    <input type="checkbox" id="profilePerfPackInput" checked />
+                    <span class="crimson-checkbox"></span>
+                    <strong>Performance Pack (recommended)</strong>
+                  </div>
                 </label>
 
                 <div class="field-group">
@@ -549,20 +518,12 @@
           </div>
         </section>
 
-        <!-- ================= LOBBY ================= -->
-        <section class="view-section" id="view-lobby">
-          <div class="section-header-row">
-            <h2 class="section-title"><span style="color:var(--crimson-500); margin-right:6px;">/</span>Lobby</h2>
-          </div>
-          <div id="lobbyRoot"></div>
-        </section>
-
         <!-- ================= 5. SETTINGS ================= -->
         <!-- ================= SERVER (local hosting) ================= -->
         <section class="view-section" id="view-server">
           <div class="section-header-row">
             <h2 class="section-title"><span style="color:var(--crimson-500); margin-right:6px;">/</span>Servers</h2>
-            <button type="button" class="btn btn-crimson" id="srvNewBtn"><svg class="ico ico-sm"><use href="#i-plus"/></svg>New server</button>
+            <button type="button" class="btn btn-launch" id="srvNewBtn"><svg class="ico ico-sm"><use href="#i-plus"/></svg>New server</button>
           </div>
           <div class="srv-layout srv-single">
             <div class="srv-main" id="srvMain"></div>
@@ -902,7 +863,7 @@
   <script src="logo-default.js"></script>
   <script src="server-ui.js"></script>
   <script src="accounts-ui.js"></script>
-  <script src="lobby-ui.js"></script>
+  <script src="p2p-codec.js"></script>
   <script src="p2p-link.js"></script>
   <script src="coaccess-ui.js"></script>
   <script src="renderer.js"></script>

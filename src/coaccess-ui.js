@@ -1,7 +1,8 @@
 /**
  * INEX CLIENT — Server Access by one-time code + Remote Server Editor over WebRTC P2P
- * - Host: "Give access" -> pick a server -> Generate code (8 chars, one-time, 15 min)
- * - Joiner: "Friend servers" -> paste code -> editor opens (no Allow/Deny prompt)
+ * - No server: the WebRTC handshake is two copy-paste codes (host code -> friend, reply code -> host)
+ * - Host: "Give access" -> pick a server -> Generate code (one-time, 15 min) -> paste the friend's reply code
+ * - Joiner: "Friend servers" -> paste the host code -> send the reply code back -> editor opens
  * - While someone is connected nobody else can use a code and the host cannot generate a new one
  * - Host can press Disconnect at any time; the joiner closing the editor ends the access
  */
@@ -79,7 +80,7 @@
   .cx-wrap{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .cx-badge{display:inline-block;min-width:16px;padding:0 5px;margin-left:6px;border-radius:9px;background:var(--crimson-500,#e11d48);color:#fff;font-size:11px;text-align:center}
   #cxOv{position:fixed;inset:0;background:rgba(0,0,0,.76);z-index:10000;display:flex;align-items:center;justify-content:center;padding:14px;backdrop-filter:blur(8px)}
-  #cxOv .cx-box{width:540px;max-width:100%;max-height:90vh;overflow:auto;padding:18px 20px;border-radius:18px;background:#100e18;border:1px solid rgba(225,29,72,.45);box-shadow:0 22px 64px rgba(0,0,0,.7)}
+  #cxOv .cx-box{width:540px;max-width:100%;max-height:90vh;overflow:auto;padding:18px 20px;border-radius:18px;background:#0b0b0b;border:1px solid rgba(255,255,255,.10);box-shadow:0 22px 64px rgba(0,0,0,.7)}
   #cxOv .cx-box.wide{width:min(1040px, 96vw);height:min(88vh, 760px);display:flex;flex-direction:column;padding:16px 18px}
   #cxOv .cx-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-shrink:0}
   #cxOv h3{margin:0;font-size:13.5px;letter-spacing:.08em}
@@ -91,14 +92,14 @@
   .cx-empty{font-size:12px;color:var(--text-muted,#8a8a99);padding:12px 4px}
   .cx-hint{font-size:11px;color:var(--text-muted,#8a8a99);margin-top:8px;line-height:1.45}
   #lbyToasts { position: fixed; right: 18px; bottom: 18px; display: grid; gap: 8px; z-index: 9999; width: 320px; max-width: calc(100% - 32px); }
-  .lby-toast { background: #12101a; border: 1px solid var(--crimson-500, #e11d48); border-radius: 12px; padding: 12px 14px; box-shadow: 0 8px 28px rgba(0,0,0,.65); font-size: 13px; }
+  .lby-toast { background: #0c0c0c; border: 1px solid rgba(255,255,255,.14); border-left: 4px solid var(--crimson-500, #e11d48); border-radius: 12px; padding: 12px 14px; box-shadow: 0 8px 28px rgba(0,0,0,.65); font-size: 13px; }
 
   /* Compact Remote Editor overrides */
   .rm-stats-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:10px;flex-shrink:0}
   .rm-stats-row .srv-stat{padding:8px 12px}
   .rm-tabs{display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,.08);padding-bottom:8px;flex-wrap:wrap}
   .rm-body{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding-right:4px}
-  .rm-log{flex:1;min-height:220px;background:rgba(4,4,8,.85);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:10px 12px;font:11.5px/1.5 Consolas,monospace;color:#cfcfe0;overflow:auto;white-space:pre-wrap;user-select:text}
+  .rm-log{flex:1;min-height:220px;background:rgba(3, 3, 3,.85);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:10px 12px;font:11.5px/1.5 Consolas,monospace;color:#cfcfe0;overflow:auto;white-space:pre-wrap;user-select:text}
   .rm-files-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
   .rm-files-grid .profile-card{padding:10px 12px;border-radius:12px;gap:8px}
   .rm-body .srv-props-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
@@ -130,13 +131,15 @@
   const h2 = el('button', 'btn glass-btn', '🔑 Give access'); h2.type = 'button';
   hub.appendChild(h1); hub.appendChild(h2); sec.appendChild(hub);
 
-  let ov = null, view = null, rmTimer = null, cdInterval = null, editorHost = null, stateOff = null;
+  let ov = null, view = null, rmTimer = null, cdInterval = null, editorHost = null, stateOff = null, runId = 0;
   function endEditorLink() {
+    if (P2P && P2P.abort) { try { P2P.abort(); } catch (_) {} }   // stop a join that is still waiting for the host
     if (stateOff) { stateOff(); stateOff = null; }
     if (editorHost && P2P) { P2P.close(editorHost).catch(() => {}); }
     editorHost = null;
   }
   function close() {
+    runId++;
     if (rmTimer) { clearInterval(rmTimer); rmTimer = null; }
     if (cdInterval) { clearInterval(cdInterval); cdInterval = null; }
     endEditorLink();
@@ -154,6 +157,7 @@
   b2.onclick = h2.onclick = () => open('give');
 
   async function load() {
+    runId++;
     if (rmTimer) { clearInterval(rmTimer); rmTimer = null; }
     if (cdInterval) { clearInterval(cdInterval); cdInterval = null; }
     endEditorLink();
@@ -172,28 +176,57 @@
     } catch (e) { body.innerHTML = '<div class="cx-empty">' + esc(clean(e)) + '</div>'; }
   }
 
-  /* ---------------- JOINER: paste a code ---------------- */
+  /* ---------------- JOINER: paste the host code ---------------- */
+  const taStyle = 'width:100%;box-sizing:border-box;resize:none;font:12px/1.5 Consolas,monospace;letter-spacing:.04em;word-break:break-all;';
+  function codeCard(code, what) {          // the code stays hidden: only a short preview + Copy
+    const flat = String(code).replace(/-/g, '');
+    const r = el('div', 'cx-row', '');
+    r.style.cssText = 'justify-content:space-between;padding:10px 12px;';
+    const sp = el('span', '', ''); sp.style.cssText = 'font-family:Consolas,monospace;letter-spacing:.05em;';
+    sp.textContent = flat.slice(0, 6) + ' •••••• ' + flat.slice(-4) + ' · ' + flat.length + ' characters';
+    const i = el('div', 'i', '<b>✓ ' + esc(what) + ' ready</b>'); i.appendChild(sp);
+    const cp = el('button', 'btn btn-sm btn-crimson', 'Copy'); cp.type = 'button';
+    cp.onclick = async () => {
+      try { await navigator.clipboard.writeText(code); cp.textContent = 'Copied ✓'; setTimeout(() => { cp.textContent = 'Copy'; }, 1500); }
+      catch (_) { sp.style.cssText = 'font:11px Consolas,monospace;word-break:break-all;user-select:all;'; sp.textContent = code; toast('<b>Select the code and press Ctrl+C.</b>'); }
+    };
+    r.appendChild(i); r.appendChild(cp);
+    return r;
+  }
+  function pasteRow(placeholder, goLabel) {  // one-line paste box + Paste button + action button
+    const r = el('div', 'cx-row', '');
+    const inp = el('input', 'inex-input glass-input', ''); inp.type = 'text'; inp.placeholder = placeholder; inp.autocomplete = 'off'; inp.spellcheck = false;
+    inp.style.cssText = 'flex:1;min-width:150px;font:12px Consolas,monospace;';
+    const pb = el('button', 'btn btn-sm glass-btn', 'Paste'); pb.type = 'button';
+    pb.onclick = async () => {
+      try { const t = await navigator.clipboard.readText(); if (t) inp.value = t.trim(); else toast('<b>Clipboard is empty.</b>'); }
+      catch (_) { toast('<b>Click the box and press Ctrl+V.</b>'); try { inp.focus(); } catch (_) {} }
+    };
+    const go = el('button', 'btn btn-sm btn-crimson', goLabel); go.type = 'button';
+    r.appendChild(inp); r.appendChild(pb); r.appendChild(go);
+    return { row: r, inp, go };
+  }
+  const SAFETY = '🔒 Safety: only share or use a code with someone you trust. It gives full control of one server (console + files) and works only once.';
+
   function renderMine(body) {
     body.innerHTML = '';
-    body.appendChild(el('div', 'cx-sec', 'JOIN WITH A CODE'));
-    const row = el('div', 'cx-row', '');
-    const inp = el('input', 'inex-input glass-input', ''); inp.type = 'text'; inp.placeholder = 'Paste code, e.g. K7M2-9QXP';
-    inp.maxLength = 12; inp.autocomplete = 'off'; inp.spellcheck = false;
-    inp.style.cssText = 'flex:1;min-width:180px;text-transform:uppercase;letter-spacing:.14em;font-weight:700;';
-    const go = el('button', 'btn btn-sm btn-crimson', 'Connect'); go.type = 'button';
-    row.appendChild(inp); row.appendChild(go); body.appendChild(row);
-    body.appendChild(el('div', 'cx-hint', 'Ask the server owner for a code (Server tab → 🔑 Give access). The code works once. When you close the editor your access ends.'));
+    body.appendChild(el('div', 'cx-sec', 'STEP 1 · PASTE THE CODE FROM THE HOST'));
+    const pr = pasteRow('Paste the host code here', 'Continue');
+    const ta = pr.inp, go = pr.go;
+    body.appendChild(pr.row);
+    body.appendChild(el('div', 'cx-hint', 'Ask the server owner for a code (Server tab → 🔑 Give access). After you continue you get a reply code: send it back to the owner and the editor opens by itself.'));
+    body.appendChild(el('div', 'cx-hint', SAFETY));
     let busy = false;
     const run = () => {
       if (busy) return;
-      const code = normCode(inp.value);
-      if (code.length !== 8) return toast('<b>The code has 8 letters/numbers.</b>');
-      busy = true; go.disabled = true; go.textContent = 'Connecting…'; inp.disabled = true;
-      openRemoteEditor({ uid: code, name: 'Host' }, { id: '', name: 'Remote server' });
+      if (!P2P) return toast('<b>P2P module did not load.</b>');
+      let info;
+      try { info = P2P.parseOffer(ta.value); } catch (e) { return fail(e); }
+      busy = true; go.disabled = true; ta.disabled = true;
+      openRemoteEditor({ uid: info.code, name: 'Host', offer: ta.value }, { id: '', name: 'Remote server' });
     };
     go.onclick = run;
-    inp.onkeydown = e => { if (e.key === 'Enter') run(); };
-    setTimeout(() => { try { inp.focus(); } catch (_) {} }, 50);
+    setTimeout(() => { try { ta.focus(); } catch (_) {} }, 50);
   }
 
   /* ---------------- REMOTE EDITOR (runs on the joiner's PC, executes on the host over P2P) ---------------- */
@@ -217,7 +250,19 @@
     let addonsQuery = '';
     let addonsInstalled = [];
 
-    body.innerHTML = '<div class="cx-empty">Connecting to the host…</div>';
+    body.innerHTML = '<div class="cx-empty">Preparing your reply code…</div>';
+    const run = ++runId;
+    function paintReplyStep(reply) {
+      body.innerHTML = '';
+      body.appendChild(el('div', 'cx-sec', 'STEP 2 · SEND THIS REPLY CODE TO THE HOST'));
+      body.appendChild(codeCard(reply, 'Reply code'));
+      const r = el('div', 'cx-row', ''); r.style.cssText = 'background:transparent;border:0;padding:6px 2px;';
+      const cx = el('button', 'btn btn-sm glass-btn', 'Cancel'); cx.type = 'button';
+      cx.onclick = () => { runId++; endEditorLink(); load(); };
+      r.appendChild(cx); body.appendChild(r);
+      body.appendChild(el('div', 'cx-hint', 'Send it to the host (Discord, WhatsApp…). When the host pastes it, the editor opens by itself. Do it within a few minutes and keep this window open.'));
+      body.appendChild(el('div', 'cx-hint', SAFETY));
+    }
 
     try {
       if (!P2P) throw new Error('P2P module did not load (p2p-link.js).');
@@ -230,7 +275,7 @@
         if (lb) paintLinkBadge(lb);
         if (ev.state === 'closed' && was === 'open' && srvInfo) toast('<b>Connection closed.</b> Ask the host for a new code to reconnect.', 5000);
       });
-      await P2P.connect(friend.uid);
+      await P2P.connect(friend.offer, reply => { if (run === runId && ov) paintReplyStep(reply); });
       allServers = (await rcall('listServers', [])) || [];
       srvInfo = allServers.find(s => s.id === srvId) || allServers[0];
       if (!srvInfo) throw new Error('The host no longer has this server.');
@@ -238,10 +283,10 @@
       linkState = 'open';
       if (titleEl) titleEl.textContent = `${String(srvInfo.name).toUpperCase()} · REMOTE EDITOR`;
     } catch (e) {
+      if (run !== runId) return;   // cancelled / closed / went back: nothing to show
       endEditorLink();
-      body.innerHTML = `<div class="cx-empty">${esc(clean(e))}</div><div style="display:flex;gap:8px;"><button type="button" class="btn btn-sm glass-btn" id="rmBackBtn">← Back</button><button type="button" class="btn btn-sm btn-crimson" id="rmRetryBtn">Retry</button></div>`;
+      body.innerHTML = `<div class="cx-empty">${esc(clean(e))}</div><div style="display:flex;gap:8px;"><button type="button" class="btn btn-sm glass-btn" id="rmBackBtn">← Back</button></div>`;
       $(body, '#rmBackBtn').onclick = load;
-      $(body, '#rmRetryBtn').onclick = () => openRemoteEditor(friend, server);
       return;
     }
 
@@ -255,7 +300,7 @@
       body.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap;flex-shrink:0;">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <button type="button" class="btn btn-sm glass-btn" id="rmBack" style="border-color:rgba(225,29,72,.45);color:#fff;">${ico('back')}Back</button>
+            <button type="button" class="btn btn-sm glass-btn" id="rmBack" style="color:#fff;">${ico('back')}Back</button>
             ${srvSelectHtml}
             <span class="srv-badge">${esc(srvInfo.loader)} ${esc(srvInfo.version)}</span>
             <span class="srv-status ${esc(srvInfo.status)}" id="rmStatusBadge">${esc(srvInfo.status)}</span>
@@ -263,7 +308,7 @@
           </div>
           <div style="display:flex;gap:6px;align-items:center;" id="rmHeaderActions">
             ${canMod ? `
-              <button type="button" class="btn btn-sm btn-crimson" id="rmStart">${ico('play')}Start</button>
+              <button type="button" class="btn btn-sm btn-launch" id="rmStart">${ico('play')}Start</button>
               <button type="button" class="btn btn-sm glass-btn" id="rmRestart">${ico('refresh')}Restart</button>
               <button type="button" class="btn btn-sm btn-danger" id="rmStop">${ico('power')}Stop</button>
             ` : ''}
@@ -418,7 +463,7 @@
 
     function playerSection(title, count, rows, empty, extraRight = '') {
       return `
-        <div class="srv-psection" style="background:rgba(16,14,22,0.55);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:10px 12px;">
+        <div class="srv-psection" style="background:rgba(11, 11, 11,0.55);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:10px 12px;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
             <div class="settings-group-label" style="margin:0;">${esc(title.toUpperCase())}${count != null ? ` (${count})` : ''}</div>
             ${extraRight}
@@ -837,10 +882,6 @@
   /* ---------------- HOST: generate a code / disconnect ---------------- */
   function renderGive(body, st, myServers) {
     body.innerHTML = '';
-    if (!st.configured) {
-      body.appendChild(el('div', 'cx-empty', 'The handshake server is not configured (firebaseConfig.js).'));
-      return;
-    }
     const srvName = id => { const s = myServers.find(x => x.id === id); return s ? s.name : 'your server'; };
 
     if (st.phase === 'connected') {
@@ -854,25 +895,36 @@
     }
 
     if (st.phase === 'waiting' && st.code) {
-      body.appendChild(el('div', 'cx-sec', 'YOUR CODE FOR ' + String(srvName(st.serverId)).toUpperCase()));
-      const big = el('div', 'cx-row', '');
-      big.style.cssText = 'justify-content:space-between;padding:14px 16px;';
-      const codeEl = el('div', '', esc(fmtCode(st.code)));
-      codeEl.style.cssText = 'font:800 28px/1 Consolas,monospace;letter-spacing:.18em;color:#fff;user-select:all;';
-      const cp = el('button', 'btn btn-sm btn-crimson', 'Copy'); cp.type = 'button';
-      cp.onclick = async () => {
-        try { await navigator.clipboard.writeText(fmtCode(st.code)); cp.textContent = 'Copied'; setTimeout(() => { cp.textContent = 'Copy'; }, 1500); }
-        catch (_) { toast('<b>Select the code and press Ctrl+C.</b>'); }
-      };
-      big.appendChild(codeEl); big.appendChild(cp); body.appendChild(big);
+      const off = P2P && P2P.getOffer ? P2P.getOffer(st.code) : null;
+      body.appendChild(el('div', 'cx-sec', 'STEP 1 · SEND THIS CODE TO YOUR FRIEND (' + String(srvName(st.serverId)).toUpperCase() + ')'));
+      if (!off) {
+        body.appendChild(el('div', 'cx-empty', 'Preparing your code…'));
+      } else if (off.error) {
+        body.appendChild(el('div', 'cx-empty', 'Could not prepare the code: ' + esc(off.error)));
+      } else {
+        body.appendChild(codeCard(off.offerCode, 'Code'));
+        body.appendChild(el('div', 'cx-sec', 'STEP 2 · PASTE THE REPLY CODE YOUR FRIEND SENDS BACK'));
+        const pr = pasteRow('Paste the reply code here', 'Connect');
+        const reply = pr.inp, conn = pr.go;
+        let busy = false;
+        conn.onclick = async () => {
+          if (busy) return;
+          if (!reply.value.trim()) return toast('<b>Paste the reply code first.</b>');
+          busy = true; conn.disabled = true; conn.textContent = 'Connecting…';
+          try { await P2P.acceptAnswer(st.code, reply.value); toast('<b>Connected.</b>'); }
+          catch (e) { fail(e); }
+          busy = false; conn.disabled = false; conn.textContent = 'Connect';
+        };
+        body.appendChild(pr.row);
+      }
       const left = el('div', 'cx-hint', ''); body.appendChild(left);
-      const tick = () => { left.textContent = 'Waiting for someone to use it… expires in ' + fmtLeft((st.exp || 0) - Date.now()) + '. One-time: it stops working after the first person joins.'; };
+      const tick = () => { left.textContent = 'Waiting for your friend… the code expires in ' + fmtLeft((st.exp || 0) - Date.now()) + '. Keep this launcher open until they are connected.'; };
       tick();
       cdInterval = setInterval(() => { tick(); if ((st.exp || 0) < Date.now() - 1500) load(); }, 1000);
       const cx = el('button', 'btn btn-sm glass-btn', 'Cancel code'); cx.type = 'button';
       cx.onclick = async () => { cx.disabled = true; try { await api.accessCancel(); } catch (e) { fail(e); } load(); };
       const w = el('div', 'cx-row', ''); w.style.cssText = 'background:transparent;border:0;padding:6px 2px;'; w.appendChild(cx); body.appendChild(w);
-      body.appendChild(el('div', 'cx-hint', 'Whoever has this code gets full editor access to this server (console + files) until you press Disconnect. Share it only with people you trust.'));
+      body.appendChild(el('div', 'cx-hint', SAFETY + ' Whoever has it can edit this server until you press Disconnect.'));
       return;
     }
 
@@ -902,8 +954,10 @@
       };
       r.appendChild(g); body.appendChild(r);
     });
-    body.appendChild(el('div', 'cx-hint', 'The code is 8 letters/numbers, works once and expires in 15 minutes. While someone is connected you cannot generate another one.'));
+    body.appendChild(el('div', 'cx-hint', 'You send a code to your friend, they send a reply code back, you paste it. No server is used. The code works once and expires in 15 minutes. While someone is connected you cannot generate another one.'));
+    body.appendChild(el('div', 'cx-hint', SAFETY));
   }
 
   if (api.onAccessState) api.onAccessState(() => { if (ov && view === 'give') load(); });
+  if (P2P && P2P.onHost) P2P.onHost(() => { if (ov && view === 'give') load(); });
 })();

@@ -1,11 +1,14 @@
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const os = require('os');
+const { spawn, spawnSync } = require('child_process');
+
+const { applyLowEndDefaults } = require('./perfDefaults');
 
 const SERVER_ADDR_RE = /^[A-Za-z0-9.\-]+(:\d{1,5})?$/;
 
 class MinecraftLauncher {
-  constructor({ settingsManager, profileManager, versionManager, loaderManager, javaManager, accountManager, installer, discordRpcManager }) {
+  constructor({ settingsManager, profileManager, versionManager, loaderManager, javaManager, accountManager, installer, discordRpcManager, modrinthManager }) {
     this.settingsManager = settingsManager;
     this.profileManager = profileManager;
     this.versionManager = versionManager;
@@ -14,6 +17,7 @@ class MinecraftLauncher {
     this.accountManager = accountManager;
     this.installer = installer;
     this.discordRpcManager = discordRpcManager || null;
+    this.modrinthManager = modrinthManager || null;
 
     this.runningProcesses = new Map();
   }
@@ -62,6 +66,18 @@ class MinecraftLauncher {
     return null;
   }
 
+  // Windows laptops/PCs with 2 GPUs run java.exe on the weak integrated GPU by default (huge FPS loss).
+  // This tells Windows to use the high-performance GPU for this Java runtime (user-level setting, no admin needed).
+  _preferHighPerformanceGpu(exePath) {
+    if (process.platform !== 'win32' || !exePath) return;
+    try {
+      spawnSync('reg', [
+        'add', 'HKCU\\Software\\Microsoft\\DirectX\\UserGpuPreferences',
+        '/v', String(exePath), '/t', 'REG_SZ', '/d', 'GpuPreference=2;', '/f'
+      ], { windowsHide: true, timeout: 4000, stdio: 'ignore' });
+    } catch (_) {}
+  }
+
   _isQuickPlaySupported(mcVersion) {
     const v = String(mcVersion || '').trim();
     const m = v.match(/^(\d+)\.(\d+)/);
@@ -72,7 +88,7 @@ class MinecraftLauncher {
     return major === 1 && minor >= 20;
   }
 
-  buildLaunchArguments({ profile, mergedMeta, account, settings, javaMajor = 21, joinServer = null }) {
+  buildLaunchArguments({ profile, mergedMeta, account, settings, javaMajor = 21, joinServer = null, cosmetics = null }) {
     const gameDataDir = settings.gameDataDir;
     const librariesDir = path.join(gameDataDir, 'libraries');
     const versionDir = path.join(gameDataDir, 'versions', profile.version);
@@ -84,16 +100,13 @@ class MinecraftLauncher {
     const { classpathEntries } = this.installer.collectRequiredLibraries(mergedMeta, 'windows');
     const cpSeparator = process.platform === 'win32' ? ';' : ':';
 
-    const overrideJar = path.join(profile.gameDir, 'inex-cosmetics-override.jar');
-    const orderedClasspath = [
-      ...(fs.existsSync(overrideJar) ? [overrideJar] : []),
-      ...classpathEntries,
-      clientJarPath
-    ];
+    const orderedClasspath = [...classpathEntries, clientJarPath];
     const fullClasspath = [...new Set(orderedClasspath)].join(cpSeparator);
 
     const ramMB = profile.ramMB || settings.defaultRamMB || 4096;
-    const minRamMB = Math.min(1024, Math.floor(ramMB / 2));
+    // Xms = Xmx: the heap never has to grow/shrink while playing, which removes the GC stutter of a small initial heap.
+    // (Memory is only reserved, not touched, so this does not eat RAM up-front.)
+    const minRamMB = ramMB;
 
     const extraJvm = (settings.jvmExtraArgs || '')
       .split(/\s+/)
@@ -116,14 +129,17 @@ class MinecraftLauncher {
       }
     }
 
-    if (settings.enableSkinSync !== false) {
+    // Skin Sync: 100% local. The agent only runs when this account has a custom skin, and it only ever
+    // touches the local player's own skin (no network, no resource pack, other players keep their skins).
+    if (settings.enableSkinSync !== false && cosmetics && cosmetics.skinFile) {
       const agentJar = this._findCosmeticsAgentJar();
       if (agentJar) {
         jvmArgs.push(
           `-javaagent:${agentJar}`,
-          '-Dinex.skin.online=true',
-          `-Dinex.skin.settingsFile=${path.join(profile.gameDir, 'inex-cosmetics-settings.txt')}`,
-          `-Dinex.skin.self=${(account.username || '').toLowerCase()}`
+          '-Dinex.skin.online=false',
+          `-Dinex.skin.self=${(account.username || '').toLowerCase()}`,
+          `-Dinex.skin.selfFile=${cosmetics.skinFile}`,
+          `-Dinex.skin.selfModel=${cosmetics.model || 'slim'}`
         );
       }
     }
@@ -357,27 +373,39 @@ class MinecraftLauncher {
     fs.mkdirSync(profile.gameDir, { recursive: true });
     const settings = this.settingsManager.getSettings();
 
+    let cosmetics = null;
     try {
-      this.accountManager.applyLocalCosmeticsToGameDir(profile.gameDir);
-      if (settings.enableSkinSync === false) {
-        onLog({
-          profileId: profile.id,
-          level: 'info',
-          line: '[INEX COSMETICS] Skin Sync is OFF (Max FPS). Firebase & custom cosmetics disabled; using default skins.'
-        });
-      } else {
-        onLog({
-          profileId: profile.id,
-          level: 'info',
-          line: '[INEX COSMETICS] Skin synced to the INEX cosmetics database.'
-        });
-      }
+      cosmetics = this.accountManager.applyLocalCosmeticsToGameDir(profile.gameDir);
+      let line;
+      if (settings.enableSkinSync === false) line = '[INEX SKIN] Skin Sync is OFF - default skins, skin agent not loaded.';
+      else if (cosmetics && cosmetics.skinFile) line = '[INEX SKIN] Local skin enabled (only you see it, no network).';
+      else line = '[INEX SKIN] No custom skin on this account - skin agent not loaded.';
+      onLog({ profileId: profile.id, level: 'info', line });
     } catch (cosmErr) {
       onLog({
         profileId: profile.id,
         level: 'warn',
-        line: `[INEX COSMETICS] Notice: ${cosmErr.message}`
+        line: `[INEX SKIN] Notice: ${cosmErr.message}`
       });
+    }
+
+    // Performance Pack: quietly retry mods that were not released for this Minecraft version yet (at most every 12h).
+    if (this.modrinthManager && profile.perfPackEnabled) {
+      try {
+        await this.modrinthManager.retryPerformancePack(profile.id, {
+          onLog: line => onLog({ profileId: profile.id, level: 'info', line })
+        });
+      } catch (_) {}
+    }
+
+    // Integrated-GPU PCs: set light graphics defaults once per profile (never overrides existing choices, no mods).
+    try {
+      const perf = applyLowEndDefaults(profile.gameDir);
+      if (perf.applied) {
+        onLog({ profileId: profile.id, level: 'info', line: `[INEX PERF] Integrated GPU detected (${perf.gpus.join(', ')}): light graphics defaults applied (${perf.added.length} setting(s)). You can change them in Options > Video Settings.` });
+      }
+    } catch (perfErr) {
+      onLog({ profileId: profile.id, level: 'warn', line: `[INEX PERF] Notice: ${perfErr.message}` });
     }
 
     // [ms-login-fix] renew the Microsoft/Minecraft token right before the game starts (no-op for local accounts)
@@ -396,7 +424,8 @@ class MinecraftLauncher {
       account,
       settings,
       javaMajor: javaResolution.runtime.major,
-      joinServer
+      joinServer,
+      cosmetics
     });
 
     try {
@@ -427,11 +456,15 @@ class MinecraftLauncher {
       });
     }
 
+    this._preferHighPerformanceGpu(javaResolution.runtime.path);
+
     const child = spawn(javaResolution.runtime.path, fullArgs, {
       cwd: profile.gameDir,
       windowsHide: false,
       detached: true // keep the game running even if the launcher is closed
     });
+    // Give the game CPU priority over the launcher UI and other background apps.
+    try { os.setPriority(child.pid, os.constants.priority.PRIORITY_ABOVE_NORMAL); } catch (_) {}
 
     this.runningProcesses.set(profile.id, child);
     try { child.unref(); } catch (_) {}
